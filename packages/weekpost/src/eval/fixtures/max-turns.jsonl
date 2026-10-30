@@ -1,0 +1,4 @@
+{"type":"system","subtype":"init","skills":["open-week"]}
+not json, a stray log line
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"t1","name":"Skill","input":{"skill":"open-week"}}]}}
+{"type":"result","subtype":"error_max_turns","is_error":false,"num_turns":3,"permission_denials":[]}

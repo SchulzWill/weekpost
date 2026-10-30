@@ -1,0 +1,8 @@
+# Keeps the pinned GitHub Actions of the weekpost workflows up to date. Review each bump: the workflows hold
+# your OpenRouter and database secrets.
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"

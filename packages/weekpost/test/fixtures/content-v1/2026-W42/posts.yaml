@@ -1,0 +1,12 @@
+version: 1
+posts:
+  - id: 2026-10-12-story-open
+    date: 2026-10-12
+    type: story
+    accounts: [a]
+    times: { a: "11:00" }
+    pillar: other
+    story: { text: { a: "Open spots." }, link_utm_content: story-2026-10-12 }
+    caption: { a: "Spots." }
+    cta: { a: "Link na bio." }
+    link: { a: "https://example.com/a/?utm_source=instagram&utm_medium=social&utm_campaign=a&utm_content=story-2026-10-12" }

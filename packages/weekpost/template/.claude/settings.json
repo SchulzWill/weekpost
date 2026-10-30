@@ -1,0 +1,28 @@
+{
+  "permissions": {
+    "deny": [
+      "Bash(*weekpost*setup*--apply*)",
+      "Bash(*weekpost* token*)",
+      "Bash(*weekpost* first-post*)",
+      "Bash(*weekpost* enqueue*)",
+      "Bash(*weekpost* cancel *--yes*)",
+      "Bash(*weekpost* restore *--yes*)",
+      "Bash(*weekpost* reschedule *--yes*)",
+      "Bash(*weekpost* resolve *--yes*)",
+      "Bash(script *)",
+      "Bash(expect *)",
+      "Bash(unbuffer *)",
+      "Bash(npx wrangler*)",
+      "Bash(wrangler*)",
+      "Bash(gh secret *)",
+      "Bash(gh pr merge*)",
+      "Bash(gh pr edit *--add-label*)",
+      "Bash(gh pr create *--label*)",
+      "Bash(gh pr ready*)",
+      "Bash(gh api*)",
+      "Bash(gh workflow run*)",
+      "Bash(gh label*)",
+      "Read(~/.config/weekpost/**)"
+    ]
+  }
+}

@@ -1,0 +1,40 @@
+name: weekpost-check
+
+# Validates the schema and the brand-voice rules of the content on every pull request that touches it.
+# No secrets, no paid calls.
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'content/**'
+      - 'weekpost.config.ts'
+      - 'package-lock.json'
+
+concurrency:
+  group: weekpost-check-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions: {}
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    env:
+      TZ: UTC
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - run: npm ci
+
+      - name: check content
+        run: npx weekpost check

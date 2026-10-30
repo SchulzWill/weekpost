@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 96" width="360" height="96">
+  <path d="M48 12 C20 20 12 50 24 76 C52 72 76 52 72 22 C64 14 56 12 48 12 Z" fill="#2F6B3A"/>
+  <path d="M26 78 C38 58 50 42 64 28" stroke="#F7F4EA" stroke-width="4" fill="none" stroke-linecap="round"/>
+  <text x="96" y="62" font-family="Inter, Arial, sans-serif" font-size="40" font-weight="800" fill="#141A14">Horta Viva</text>
+</svg>

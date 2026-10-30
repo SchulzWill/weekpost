@@ -1,0 +1,148 @@
+name: weekpost-enqueue
+
+# On merge to main: queues the media APPROVED in the preview, never regenerating it (image models are not
+# deterministic). It downloads the `weekpost-preview` artifact of the preview run on the last commit of the
+# merged pull request, checks it against the merged content (--dry-run, no secrets) and only then writes the
+# queue. Without a preview, or with a manifest that does not match, it fails and writes nothing.
+# Runs code from main only, never from a pull request; the database secrets exist only in the write step.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'content/*-W*/**'
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: Number of the merged pull request (queue again from its preview)
+        required: true
+      allow_past:
+        description: Also queue posts whose publish time has already passed (they go out at once). Off by default; those posts are skipped.
+        type: boolean
+        default: false
+
+# A group per run, never cancelled midway (partial uploads). A single shared group would keep only ONE pending run and
+# cancel the older pending one, so a third merge in a row would silently drop the second. (A push has no pull request
+# number, so the group is always the run id.) Runs may overlap, or be re-run later: every row remembers the commit that
+# queued it, and a run only cancels or rewrites rows written by its own commit or an ancestor of it.
+concurrency:
+  group: weekpost-enqueue-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  enqueue:
+    # Main only, on push and on manual dispatch: a dispatch from another branch would run that branch's code with
+    # the database secrets. Also restrict the environment's deployment branches to main (defense in depth).
+    if: github.ref == 'refs/heads/main'
+    environment: weekpost
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: write
+    env:
+      TZ: UTC
+      GH_TOKEN: ${{ github.token }}
+      REPO: ${{ github.repository }}
+      SCRATCH: /tmp/weekpost
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          # The whole history: the enqueue asks git whether the commit that queued a row is an ancestor of this one.
+          fetch-depth: 0
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - run: npm ci
+
+      # Commit -> merged pull request -> the weeks it touched (file list from the API). A merge without a week
+      # folder has nothing to queue.
+      - name: weeks of the pull request
+        id: weeks
+        env:
+          SHA: ${{ github.sha }}
+          INPUT_PR: ${{ inputs.pr }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$SCRATCH"
+          pr="${INPUT_PR:-$(gh api "repos/$REPO/commits/$SHA/pulls" --jq '[.[] | select(.merged_at != null)][0].number')}"
+          [[ "$pr" =~ ^[0-9]+$ ]] || { echo "::error::no merged pull request found for commit $SHA"; exit 1; }
+          gh pr diff "$pr" --repo "$REPO" --name-only > "$SCRATCH/paths.txt"
+          npx weekpost weeks "$SCRATCH/paths.txt" "$SCRATCH/weeks.txt"
+          echo "pr=$pr" >> "$GITHUB_OUTPUT"
+          if [ -s "$SCRATCH/weeks.txt" ]; then
+            echo "any=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "any=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::pull request #$pr changes no week under content/: nothing to queue"
+          fi
+
+      # Head of the pull request -> successful preview run on that head -> artifact. A later push makes a new
+      # run, and that is the one that counts.
+      - name: download the approved preview
+        id: preview
+        if: steps.weeks.outputs.any == 'true'
+        continue-on-error: true
+        env:
+          PR: ${{ steps.weeks.outputs.pr }}
+        run: |
+          set -euo pipefail
+          head=$(gh api "repos/$REPO/pulls/$PR" --jq .head.sha)
+          run=$(gh api "repos/$REPO/actions/workflows/weekpost-preview.yml/runs?head_sha=$head&status=success&per_page=1" --jq '.workflow_runs[0].id // empty')
+          [ -n "$run" ] || { echo "::error::no successful preview run for pull request #$PR at ${head:0:7}"; exit 1; }
+          gh run download "$run" --repo "$REPO" --name weekpost-preview --dir "$SCRATCH/artifact"
+
+      # Plans everything before writing (no secrets here): a failure means nothing was touched.
+      - name: check the preview against the merged content
+        id: dry
+        if: steps.preview.outcome == 'success'
+        continue-on-error: true
+        env:
+          SHA: ${{ github.sha }}
+        run: |
+          set -o pipefail
+          npx weekpost enqueue "$SCRATCH/artifact" --weeks="$SCRATCH/weeks.txt" --commit="$SHA" --dry-run 2>&1 | tee "$SCRATCH/enqueue.log"
+
+      - name: upload the media and schedule
+        id: write
+        if: steps.dry.outcome == 'success'
+        continue-on-error: true
+        env:
+          WEEKPOST_SUPABASE_URL: ${{ secrets.WEEKPOST_SUPABASE_URL }}
+          WEEKPOST_SUPABASE_KEY: ${{ secrets.WEEKPOST_SUPABASE_KEY }}
+          SHA: ${{ github.sha }}
+          ALLOW_PAST: ${{ inputs.allow_past }}
+        run: |
+          set -o pipefail
+          extra=()
+          if [ "$ALLOW_PAST" = "true" ]; then extra+=(--allow-past); fi
+          npx weekpost enqueue "$SCRATCH/artifact" --weeks="$SCRATCH/weeks.txt" --commit="$SHA" --summary="$SCRATCH/summary.json" ${extra[@]+"${extra[@]}"} 2>&1 | tee "$SCRATCH/enqueue.log"
+
+      # The text comes from the --summary JSON, not from the printed output.
+      - name: comment on the pull request
+        if: ${{ always() && steps.weeks.outputs.any == 'true' }}
+        env:
+          PR: ${{ steps.weeks.outputs.pr }}
+          PREVIEW: ${{ steps.preview.outcome }}
+          DRY: ${{ steps.dry.outcome }}
+          WRITE: ${{ steps.write.outcome }}
+        run: |
+          if [ "$PREVIEW" != "success" ]; then
+            npx weekpost ci comment enqueue --status=no-preview --run-url="$RUN_URL" --out="$SCRATCH/comment.md"
+          elif [ "$DRY" != "success" ] || [ "$WRITE" != "success" ]; then
+            npx weekpost ci comment enqueue --status=failed --log="$SCRATCH/enqueue.log" --run-url="$RUN_URL" --out="$SCRATCH/comment.md"
+          else
+            npx weekpost ci comment enqueue --status=ok --summary="$SCRATCH/summary.json" --run-url="$RUN_URL" --out="$SCRATCH/comment.md"
+          fi
+          gh pr comment "$PR" --repo "$REPO" --body-file "$SCRATCH/comment.md"
+
+      - name: fail if nothing was queued
+        if: ${{ always() && steps.weeks.outputs.any == 'true' && (steps.preview.outcome == 'failure' || steps.dry.outcome == 'failure' || steps.write.outcome == 'failure') }}
+        run: exit 1

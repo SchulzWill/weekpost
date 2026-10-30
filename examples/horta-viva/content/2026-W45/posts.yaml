@@ -1,0 +1,108 @@
+version: 1
+posts:
+  - id: 2026-11-02-carousel-herbs
+    date: 2026-11-02
+    type: carousel
+    accounts: [en, pt-br]
+    times: { en: "12:00", pt-br: "12:00" }
+    pillar: tip
+    slides:
+      - kicker: { en: "Herbs", pt-br: "Ervas" }
+        title: { en: "Three herbs for a small windowsill", pt-br: "Três ervas para uma janela pequena" }
+        sub: { en: "You only need a bright spot and a pot.", pt-br: "Basta um lugar com luz e um vaso." }
+        dark: true
+        image_prompt: "Three small pots of basil, mint and parsley on a bright kitchen windowsill, photo style"
+      - kicker: { en: "1. Basil", pt-br: "1. Manjericão" }
+        title: { en: "Basil likes light", pt-br: "Manjericão gosta de luz" }
+        sub: { en: "Give it at least six hours of sun and pinch the tips often.", pt-br: "Dê pelo menos seis horas de sol e belisque as pontas." }
+        tip: { en: "Pinching the tips makes the plant grow bushier.", pt-br: "Beliscar as pontas deixa a planta mais cheia." }
+        dark: false
+        image_prompt: "Close-up of a healthy basil plant in a terracotta pot, natural light, photo style"
+      - kicker: { en: "2. Mint", pt-br: "2. Hortelã" }
+        title: { en: "Mint needs its own pot", pt-br: "Hortelã pede um vaso só dela" }
+        sub: { en: "Its roots spread fast and crowd out other herbs.", pt-br: "As raízes se espalham e tomam o espaço das outras ervas." }
+        dark: false
+        image_prompt: "A pot of fresh mint leaves on a wooden table, natural light, photo style"
+    caption:
+      en: "Three herbs that grow well on a small windowsill."
+      pt-br: "Três ervas que crescem bem numa janela pequena."
+    cta: { en: "Save this post. Link in bio.", pt-br: "Salve este post. Link na bio." }
+    link:
+      en: "https://hortaviva.example/en/?utm_source=instagram&utm_medium=social&utm_campaign=en&utm_content=2026-11-02-carousel-herbs"
+      pt-br: "https://hortaviva.example/br/?utm_source=instagram&utm_medium=social&utm_campaign=pt-br&utm_content=2026-11-02-carousel-herbs"
+
+  - id: 2026-11-04-story-seeds
+    date: 2026-11-04
+    type: story
+    accounts: [en]
+    times: { en: "09:00" }
+    pillar: other
+    story:
+      text: { en: "Seed swap this Saturday. Bring a jar." }
+      link_utm_content: story-2026-11-04
+      image_prompt: "Small paper envelopes of seeds on a wooden table, photo style"
+    caption: { en: "Seed swap this Saturday." }
+    cta: { en: "Details at the link." }
+    link:
+      en: "https://hortaviva.example/en/?utm_source=instagram&utm_medium=social&utm_campaign=en&utm_content=story-2026-11-04"
+
+  - id: 2026-11-06-reel-watering
+    date: 2026-11-06
+    type: reel
+    accounts: [en]
+    times: { en: "18:00" }
+    pillar: tip
+    reel:
+      segments:
+        - text: { en: "Water in the morning." }
+          image_prompt: "A watering can over a row of green seedlings in morning light, photo style"
+          seconds: 5
+        - text: { en: "Water the soil, not the leaves." }
+          image_prompt: "Water poured at the base of a tomato plant, close-up, photo style"
+          seconds: 5
+        - text: { en: "Add mulch to keep it moist." }
+          image_prompt: "Straw mulch around a young plant in a raised bed, photo style"
+          seconds: 5
+      narration: { en: "Water in the morning. Aim at the soil, not the leaves. Then add mulch to keep it moist." }
+    caption: { en: "Three habits for a healthier garden." }
+    cta: { en: "Follow along. Link in bio." }
+    link:
+      en: "https://hortaviva.example/en/?utm_source=instagram&utm_medium=social&utm_campaign=en&utm_content=2026-11-06-reel-watering"
+
+  - id: 2026-11-08-reel-weekly-recap
+    date: 2026-11-08
+    type: reel
+    accounts: [en]
+    times: { en: "18:00" }
+    pillar: other
+    reel:
+      segments:
+        - text: { en: "Weekly recap: the garden in eight steps." }
+          image_prompt: "Wide shot of a sunny urban terrace garden with raised beds, photo style"
+          seconds: 8
+        - text: { en: "Monday: we sowed basil and parsley." }
+          image_prompt: "Hands sowing seeds into a small tray of soil, photo style"
+          seconds: 8
+        - text: { en: "Tuesday: the mint got its own pot." }
+          image_prompt: "A pot of mint next to a row of herbs on a windowsill, photo style"
+          seconds: 8
+        - text: { en: "Wednesday: morning watering at the base." }
+          image_prompt: "Watering can pouring at the base of a tomato plant, photo style"
+          seconds: 7
+        - text: { en: "Thursday: mulch went around the tomatoes." }
+          image_prompt: "Straw mulch around young tomato plants in a raised bed, photo style"
+          seconds: 7
+        - text: { en: "Friday: first lettuce leaves to harvest." }
+          image_prompt: "Fresh lettuce leaves in a wooden crate, photo style"
+          seconds: 7
+        - text: { en: "Saturday: the seed swap filled a table." }
+          image_prompt: "People exchanging paper seed envelopes at a market table, photo style"
+          seconds: 7
+        - text: { en: "Next week: bring a jar and a friend." }
+          image_prompt: "Empty glass jars lined up on a wooden bench in soft light, photo style"
+          seconds: 8
+      narration: { en: "This week at the garden, in eight quick steps. We sowed basil and parsley on Monday. On Tuesday the mint got a pot of its own, so its roots stop crowding the other herbs. On Wednesday we watered in the morning, at the base of the plants. On Thursday we spread straw mulch around the tomatoes to keep the soil moist. By Friday the first lettuce leaves were ready to harvest. On Saturday the seed swap filled a whole table with paper envelopes. Next week, bring a jar and a friend, and we will do it again." }
+    caption: { en: "The week in the garden, from sowing to the seed swap." }
+    cta: { en: "Follow along. Link in bio." }
+    link:
+      en: "https://hortaviva.example/en/?utm_source=instagram&utm_medium=social&utm_campaign=en&utm_content=2026-11-08-reel-weekly-recap"

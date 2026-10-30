@@ -1,0 +1,34 @@
+name = "weekpost-publisher"
+main = "index.ts"
+compatibility_date = "2026-09-15"
+
+# The Worker only has a `scheduled` handler (cron); there is no HTTP route. Without these two lines
+# the Worker would be reachable at a public workers.dev URL.
+workers_dev = false
+preview_urls = false
+
+# No `account_id` here on purpose: wrangler reads it from your login or from CLOUDFLARE_ACCOUNT_ID.
+# Deploying is a manual step you run yourself (`npx wrangler deploy`); nothing in this repo does it.
+#
+# Secrets (NEVER in this file; run `npx wrangler secret put <NAME>` and type the value at the prompt):
+#   WEEKPOST_SUPABASE_URL
+#   WEEKPOST_SUPABASE_KEY      server-side secret key (sb_secret_...)
+# The Instagram tokens are not secrets here: they live in the `weekpost_tokens` table, because a renewal
+# returns a new token and Worker secrets do not update themselves.
+
+# Optional plain vars (uncomment to change):
+# [vars]
+# WEEKPOST_MAX_POSTS_PER_RUN = "2"      # 2 carousels of 10 images (20 subrequests each at worst) fit in the Free plan's 50; with 2 accounts renewing in one run only 1 is claimed
+# WEEKPOST_BUCKET = "weekpost-media"
+# WEEKPOST_REFRESH_TOKENS = "false"     # test tokens or smoke runs: never ask Meta to renew
+# WEEKPOST_PURGE_AFTER_DAYS = "7"
+
+# Without this, the logs of a Worker with a cron are not kept (only a live `wrangler tail`).
+# https://developers.cloudflare.com/workers/observability/logs/workers-logs/
+[observability]
+enabled = true
+head_sampling_rate = 1
+
+[triggers]
+# One cron every 5 minutes. https://developers.cloudflare.com/workers/configuration/cron-triggers/
+crons = ["*/5 * * * *"]
