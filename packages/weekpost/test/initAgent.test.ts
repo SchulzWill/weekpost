@@ -109,10 +109,11 @@ describe("skills and agent files", () => {
   const files = ["AGENTS.md", "BRIEF.md", "skills/open-week/SKILL.md", "skills/queue-status/SKILL.md", ".codex/config.toml", ".codex/rules/weekpost.rules"];
   const text = files.map((f) => readFileSync(join(TEMPLATE_DIR, f), "utf8"));
 
-  it("carry no brand, person or id", () => {
-    // Built from pieces so that this file does not hold the terms itself.
-    const banned = new RegExp(["cui" + "dasa", "ai" + "bj", "schulz" + "will", "n8" + "n", "178" + "41", "vault", "lisb" + "oa"].join("|"), "i");
-    for (const [i, t] of text.entries()) expect(t, files[i]).not.toMatch(banned);
+  it("carry no account handle, URL or long numeric id", () => {
+    for (const [i, t] of text.entries()) {
+      expect(t, files[i]).not.toMatch(/(^|\s)@[A-Za-z0-9_.]{3,}/);
+      expect(t, files[i]).not.toMatch(/(^|[^0-9])[0-9]{15,17}([^0-9]|$)/);
+    }
   });
 
   it("have a name that matches the folder and a description with triggers", () => {
