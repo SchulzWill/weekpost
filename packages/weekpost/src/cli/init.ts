@@ -23,8 +23,8 @@ export type InitDeps = {
   symlink?: (target: string, path: string) => void;
 };
 
-/** `.claude/skills` points at `skills/`, so Claude Code finds the skills. npm drops symlinks too, so init creates it. */
-const SKILLS_LINK = ".claude/skills";
+/** `.claude/skills` (Claude Code) and `.agents/skills` (Codex) point at `skills/`. npm drops symlinks too, so init creates them. */
+const SKILLS_LINKS = [".claude/skills", ".agents/skills"];
 const SKILLS_TARGET = "../skills";
 
 /** Problems with the answers, one line each (empty = fine). Uses the same rules as the config. */
@@ -66,9 +66,9 @@ const lstatOrNull = (p: string) => {
   }
 };
 
-/** `.claude/skills` -> `../skills`; a copy of `skills/` if the link cannot be made. */
-function linkSkills(dir: string, symlink: NonNullable<InitDeps["symlink"]>): "link" | "copy" {
-  const at = join(dir, SKILLS_LINK);
+/** `<agent dir>/skills` -> `../skills`; a copy of `skills/` if the link cannot be made. */
+function linkSkills(dir: string, link: string, symlink: NonNullable<InitDeps["symlink"]>): "link" | "copy" {
+  const at = join(dir, link);
   mkdirSync(dirname(at), { recursive: true });
   try {
     symlink(SKILLS_TARGET, at);
@@ -157,7 +157,7 @@ export async function runInit(args: string[], out: Out = console, cwd = process.
   const today = new Date();
   const rendered = renderTemplate(answers, { today });
   const files = rendered.map((f) => f.path);
-  const conflicts = findConflicts(dir, [...files, LOCK_FILE, SKILLS_LINK]);
+  const conflicts = findConflicts(dir, [...files, LOCK_FILE, ...SKILLS_LINKS]);
   if (conflicts.length) {
     out.error(`nothing was written: these paths already exist in ${dir}:\n${conflicts.map((c) => `  ${c}`).join("\n")}\nMove them away, or run init in an empty directory.`);
     return 1;
@@ -170,8 +170,8 @@ export async function runInit(args: string[], out: Out = console, cwd = process.
   }
   // The hashes are of the bytes just written: `upgrade` tells a file you edited from one it can safely replace.
   writeFileSync(join(dir, LOCK_FILE), serializeLock(buildLock(rendered, answers, today)), { flag: "wx" });
-  const linked = linkSkills(dir, deps.symlink ?? ((t, p) => symlinkSync(t, p, "dir")));
-  out.log(`wrote ${files.length} files and ${LOCK_FILE} to ${dir}${linked === "copy" ? " (.claude/skills is a copy of skills/: symbolic links are not available here, so keep the two in step)" : ""}`);
+  const copied = SKILLS_LINKS.filter((l) => linkSkills(dir, l, deps.symlink ?? ((t, p) => symlinkSync(t, p, "dir"))) === "copy");
+  out.log(`wrote ${files.length} files and ${LOCK_FILE} to ${dir}${copied.length ? ` (${copied.join(" and ")} ${copied.length > 1 ? "are copies" : "is a copy"} of skills/: symbolic links are not available here, so keep them in step)` : ""}`);
 
   out.log("\nRunning weekpost check:");
   const checked = await runCheck([`--project=${dir}`], out, cwd);

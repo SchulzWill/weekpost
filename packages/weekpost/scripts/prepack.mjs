@@ -14,6 +14,8 @@ const required = [
   "skills/open-week/SKILL.md",
   "skills/queue-status/SKILL.md",
   ".claude/settings.json",
+  ".codex/config.toml",
+  ".codex/rules/weekpost.rules",
   "assets/logo.svg",
   "assets/fonts/OFL.txt",
   "assets/fonts/inter-400.woff2",
