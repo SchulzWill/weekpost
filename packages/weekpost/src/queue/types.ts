@@ -102,6 +102,33 @@ export interface OperatorDb {
   upsertToken(t: { account: string; igUserId: string; accessToken: string; expiresAt: string }): Promise<void>;
 }
 
+/** One collected number. `postId` is the empty string for the account scope. */
+export interface MetricRow {
+  scope: "post" | "account";
+  postId: string;
+  account: string;
+  /** YYYY-MM-DD (UTC) of the collection. */
+  collectedOn: string;
+  metric: string;
+  value: number;
+}
+
+/** What `weekpost metrics` needs from the queue (migration 0005). */
+export interface MetricsDb extends Pick<PublisherDb, "tokens" | "stuck"> {
+  /** Published rows with a media id, published at or after the instant. */
+  publishedSince(sinceIso: string): Promise<QueueRow[]>;
+  /** Stored metrics collected on or after the day (YYYY-MM-DD). */
+  metricsSince(day: string): Promise<MetricRow[]>;
+  /** Insert or replace by (scope, post, account, day, metric). */
+  upsertMetrics(rows: MetricRow[]): Promise<void>;
+  /** Rows in `failed`. */
+  failed(): Promise<QueueRow[]>;
+  /** `scheduled` rows whose publish time is before the instant. */
+  overdue(beforeIso: string): Promise<QueueRow[]>;
+  /** `manual` rows (Stories to post by hand) whose time is at or after `sinceIso` and before `untilIso`. */
+  manualDue(sinceIso: string, untilIso: string): Promise<QueueRow[]>;
+}
+
 export type Db = PublisherDb & OperatorDb;
 
 export interface Storage {
