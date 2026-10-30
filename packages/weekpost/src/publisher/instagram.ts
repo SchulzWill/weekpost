@@ -20,7 +20,11 @@ export const GRAPH_API_VERSION = "v26.0";
 
 export type ContainerStatus = "FINISHED" | "IN_PROGRESS" | "ERROR" | "EXPIRED" | "PUBLISHED";
 
-export class GraphError extends Error {}
+export class GraphError extends Error {
+  constructor(message: string, readonly code?: number, readonly subcode?: number) {
+    super(message);
+  }
+}
 
 export function redact(text: string, secret: string): string {
   return secret ? text.split(secret).join("[token]") : text;
@@ -59,7 +63,7 @@ export class InstagramGraph {
       const err = (body.error ?? {}) as { message?: string; code?: number; error_subcode?: number; error_user_msg?: string };
       const code = err.code ? ` ${err.code}${err.error_subcode ? `/${err.error_subcode}` : ""}` : "";
       const msg = err.error_user_msg ?? err.message ?? `HTTP ${res.status}`;
-      throw new GraphError(redact(`Instagram${code}: ${msg}`, token));
+      throw new GraphError(redact(`Instagram${code}: ${msg}`, token), err.code, err.error_subcode);
     }
     return body;
   }
@@ -108,6 +112,33 @@ export class InstagramGraph {
     return typeof body.permalink === "string" ? body.permalink : null;
   }
 
+  /**
+   * Insights of one post: `GET /<media-id>/insights`. Meta rejects the whole request when one metric is not valid for the
+   * media type, so the caller must pass only metrics that fit it. Values that are not numbers are left out.
+   * https://developers.facebook.com/docs/instagram-platform/reference/instagram-media/insights
+   */
+  async mediaInsights(mediaId: string, token: string, metrics: string[]): Promise<Record<string, number>> {
+    const body = await this.call("GET", this.url(`${mediaId}/insights`), token, { metric: metrics.join(",") });
+    return insightValues(body, (m) => (m.values as { value?: unknown }[] | undefined)?.[0]?.value);
+  }
+
+  /**
+   * Account insights summed over a window: `GET /<ig-user-id>/insights` with `metric_type=total_value`.
+   * https://developers.facebook.com/docs/instagram-platform/api-reference/instagram-user/insights
+   */
+  async accountInsights(igUserId: string, token: string, o: { metrics: string[]; sinceSeconds: number; untilSeconds: number }): Promise<Record<string, number>> {
+    const body = await this.call("GET", this.url(`${igUserId}/insights`), token, {
+      metric: o.metrics.join(","), metric_type: "total_value", period: "day", since: String(o.sinceSeconds), until: String(o.untilSeconds),
+    });
+    return insightValues(body, (m) => (m.total_value as { value?: unknown } | undefined)?.value);
+  }
+
+  /** `followers_count` of the account profile. */
+  async followersCount(igUserId: string, token: string): Promise<number | null> {
+    const body = await this.call("GET", this.url(igUserId), token, { fields: "followers_count" });
+    return typeof body.followers_count === "number" ? body.followers_count : null;
+  }
+
   /** The account a token belongs to: `GET /me`. */
   async me(token: string): Promise<{ userId: string; username: string }> {
     const body = await this.call("GET", this.url("me"), token, { fields: "user_id,username" });
@@ -131,4 +162,14 @@ export class InstagramGraph {
     }
     return { accessToken: body.access_token, expiresInSeconds: body.expires_in };
   }
+}
+
+/** `{ data: [{ name, ... }] }` to `{ name: number }`, reading each value with `pick`. Titles and descriptions are localized and never used. */
+function insightValues(body: Record<string, unknown>, pick: (m: Record<string, unknown>) => unknown): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const m of Array.isArray(body.data) ? (body.data as Record<string, unknown>[]) : []) {
+    const v = pick(m);
+    if (typeof m.name === "string" && typeof v === "number" && Number.isFinite(v)) out[m.name] = v;
+  }
+  return out;
 }

@@ -115,7 +115,7 @@ export interface MetricRow {
 
 /** What `weekpost metrics` needs from the queue (migration 0005). */
 export interface MetricsDb extends Pick<PublisherDb, "tokens" | "stuck"> {
-  /** Published rows with a media id, published at or after the instant. */
+  /** Published rows (with or without a media id), published at or after the instant. */
   publishedSince(sinceIso: string): Promise<QueueRow[]>;
   /** Stored metrics collected on or after the day (YYYY-MM-DD). */
   metricsSince(day: string): Promise<MetricRow[]>;

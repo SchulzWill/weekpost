@@ -197,7 +197,7 @@ export function supabaseDb(url: string, key: string, fetchFn: Fetch = fetch): Db
     },
 
     async publishedSince(sinceIso) {
-      const q = `select=*&status=eq.published&media_id=not.is.null&published_at=gte.${encodeURIComponent(sinceIso)}&order=published_at,post_id,account`;
+      const q = `select=*&status=eq.published&published_at=gte.${encodeURIComponent(sinceIso)}&order=published_at,post_id,account`;
       return ((await req(`/rest/v1/${TABLE}?${q}`)) as Raw[]).map(toRow);
     },
     async metricsSince(day) {
