@@ -4,7 +4,7 @@ Last updated: <DATE>
 
 This is a short, generic policy for a brand that uses weekpost to publish to its own Instagram professional account.
 It is a starting point, not legal advice: read it, change it to match what you really do, and have it checked if your
-situation needs it. Then publish it on a public web page and give that URL to Meta (see the README, step 4).
+situation needs it. Then publish it on a public web page and give that URL to Meta (see docs/setup.md in the weekpost repository, step 4).
 
 ## Who we are
 

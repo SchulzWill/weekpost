@@ -13,7 +13,7 @@ Run `npx weekpost status --json` (add `--week=YYYY-Www` for one week, `--failed`
 
 ## Explain a failure
 
-Read `last_error` and match it with the table "Reading the Worker logs" in the weekpost README. Then suggest, in this order:
+Read `last_error` and match it with the table "Reading the Worker logs" in `docs/operate.md` of the weekpost repository. Then suggest, in this order:
 
 1. Check Instagram first: if the post is already there, the human runs `resolve ... --published=<permalink>`.
 2. If it really did not go out, the human runs `reschedule <id> --account=<id> --at="YYYY-MM-DD HH:MM" --rearm`.
