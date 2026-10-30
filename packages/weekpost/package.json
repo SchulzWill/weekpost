@@ -3,6 +3,26 @@
   "version": "0.1.0",
   "description": "Your app's weekly social media, as code.",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/SchulzWill/weekpost.git",
+    "directory": "packages/weekpost"
+  },
+  "homepage": "https://github.com/SchulzWill/weekpost#readme",
+  "bugs": {
+    "url": "https://github.com/SchulzWill/weekpost/issues"
+  },
+  "keywords": [
+    "social-media",
+    "instagram",
+    "content-as-code",
+    "ai",
+    "agents",
+    "claude-code",
+    "codex",
+    "reels",
+    "scheduler"
+  ],
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
