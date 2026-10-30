@@ -1,0 +1,354 @@
+# Rules for the Codex CLI (https://developers.openai.com/codex/rules). Codex loads this file only when you trust the project.
+# "forbidden" blocks a command, "prompt" asks you first, and the strictest matching rule wins.
+# These are prefix rules: they match the command words as written, so other ways to run the same program
+# (a script, `sh -c '...'`, a variable) can slip through. They reduce accidents; they are not a security boundary.
+# `weekpost setup --only=x --apply` is caught by the "prompt" rule for `setup`; `--yes` by the ones for cancel, restore,
+# reschedule and resolve.
+
+prefix_rule(
+    pattern = ["npx", "weekpost", "setup", "--apply"],
+    decision = "forbidden",
+    justification = "weekpost setup --apply: writes outside the repository or gives the approval a human must give; run it yourself in a terminal",
+)
+
+prefix_rule(
+    pattern = ["npx", ["-y", "--yes"], "weekpost", "setup", "--apply"],
+    decision = "forbidden",
+    justification = "weekpost setup --apply: writes outside the repository or gives the approval a human must give; run it yourself in a terminal",
+)
+
+prefix_rule(
+    pattern = ["weekpost", "setup", "--apply"],
+    decision = "forbidden",
+    justification = "weekpost setup --apply: writes outside the repository or gives the approval a human must give; run it yourself in a terminal",
+)
+
+prefix_rule(
+    pattern = ["./node_modules/.bin/weekpost", "setup", "--apply"],
+    decision = "forbidden",
+    justification = "weekpost setup --apply: writes outside the repository or gives the approval a human must give; run it yourself in a terminal",
+)
+
+prefix_rule(
+    pattern = ["node", ["node_modules/weekpost/bin/weekpost.js", "./node_modules/.bin/weekpost"], "setup", "--apply"],
+    decision = "forbidden",
+    justification = "weekpost setup --apply: writes outside the repository or gives the approval a human must give; run it yourself in a terminal",
+)
+
+prefix_rule(
+    pattern = ["npx", "weekpost", "token"],
+    decision = "forbidden",
+    justification = "weekpost token: writes outside the repository or gives the approval a human must give; run it yourself in a terminal",
+)
+
+prefix_rule(
+    pattern = ["npx", ["-y", "--yes"], "weekpost", "token"],
+    decision = "forbidden",
+    justification = "weekpost token: writes outside the repository or gives the approval a human must give; run it yourself in a terminal",
+)
+
+prefix_rule(
+    pattern = ["weekpost", "token"],
+    decision = "forbidden",
+    justification = "weekpost token: writes outside the repository or gives the approval a human must give; run it yourself in a terminal",
+)
+
+prefix_rule(
+    pattern = ["./node_modules/.bin/weekpost", "token"],
+    decision = "forbidden",
+    justification = "weekpost token: writes outside the repository or gives the approval a human must give; run it yourself in a terminal",
+)
+
+prefix_rule(
+    pattern = ["node", ["node_modules/weekpost/bin/weekpost.js", "./node_modules/.bin/weekpost"], "token"],
+    decision = "forbidden",
+    justification = "weekpost token: writes outside the repository or gives the approval a human must give; run it yourself in a terminal",
+)
+
+prefix_rule(
+    pattern = ["npx", "weekpost", "first-post"],
+    decision = "forbidden",
+    justification = "weekpost first-post: writes outside the repository or gives the approval a human must give; run it yourself in a terminal",
+)
+
+prefix_rule(
+    pattern = ["npx", ["-y", "--yes"], "weekpost", "first-post"],
+    decision = "forbidden",
+    justification = "weekpost first-post: writes outside the repository or gives the approval a human must give; run it yourself in a terminal",
+)
+
+prefix_rule(
+    pattern = ["weekpost", "first-post"],
+    decision = "forbidden",
+    justification = "weekpost first-post: writes outside the repository or gives the approval a human must give; run it yourself in a terminal",
+)
+
+prefix_rule(
+    pattern = ["./node_modules/.bin/weekpost", "first-post"],
+    decision = "forbidden",
+    justification = "weekpost first-post: writes outside the repository or gives the approval a human must give; run it yourself in a terminal",
+)
+
+prefix_rule(
+    pattern = ["node", ["node_modules/weekpost/bin/weekpost.js", "./node_modules/.bin/weekpost"], "first-post"],
+    decision = "forbidden",
+    justification = "weekpost first-post: writes outside the repository or gives the approval a human must give; run it yourself in a terminal",
+)
+
+prefix_rule(
+    pattern = ["npx", "weekpost", "enqueue"],
+    decision = "forbidden",
+    justification = "weekpost enqueue: writes outside the repository or gives the approval a human must give; run it yourself in a terminal",
+)
+
+prefix_rule(
+    pattern = ["npx", ["-y", "--yes"], "weekpost", "enqueue"],
+    decision = "forbidden",
+    justification = "weekpost enqueue: writes outside the repository or gives the approval a human must give; run it yourself in a terminal",
+)
+
+prefix_rule(
+    pattern = ["weekpost", "enqueue"],
+    decision = "forbidden",
+    justification = "weekpost enqueue: writes outside the repository or gives the approval a human must give; run it yourself in a terminal",
+)
+
+prefix_rule(
+    pattern = ["./node_modules/.bin/weekpost", "enqueue"],
+    decision = "forbidden",
+    justification = "weekpost enqueue: writes outside the repository or gives the approval a human must give; run it yourself in a terminal",
+)
+
+prefix_rule(
+    pattern = ["node", ["node_modules/weekpost/bin/weekpost.js", "./node_modules/.bin/weekpost"], "enqueue"],
+    decision = "forbidden",
+    justification = "weekpost enqueue: writes outside the repository or gives the approval a human must give; run it yourself in a terminal",
+)
+
+prefix_rule(
+    pattern = ["npx", "weekpost", "setup"],
+    decision = "prompt",
+    justification = "weekpost setup: may change infrastructure or the queue (with --apply or --yes); read the command and run it yourself",
+)
+
+prefix_rule(
+    pattern = ["npx", ["-y", "--yes"], "weekpost", "setup"],
+    decision = "prompt",
+    justification = "weekpost setup: may change infrastructure or the queue (with --apply or --yes); read the command and run it yourself",
+)
+
+prefix_rule(
+    pattern = ["weekpost", "setup"],
+    decision = "prompt",
+    justification = "weekpost setup: may change infrastructure or the queue (with --apply or --yes); read the command and run it yourself",
+)
+
+prefix_rule(
+    pattern = ["./node_modules/.bin/weekpost", "setup"],
+    decision = "prompt",
+    justification = "weekpost setup: may change infrastructure or the queue (with --apply or --yes); read the command and run it yourself",
+)
+
+prefix_rule(
+    pattern = ["node", ["node_modules/weekpost/bin/weekpost.js", "./node_modules/.bin/weekpost"], "setup"],
+    decision = "prompt",
+    justification = "weekpost setup: may change infrastructure or the queue (with --apply or --yes); read the command and run it yourself",
+)
+
+prefix_rule(
+    pattern = ["npx", "weekpost", "cancel"],
+    decision = "prompt",
+    justification = "weekpost cancel: may change infrastructure or the queue (with --apply or --yes); read the command and run it yourself",
+)
+
+prefix_rule(
+    pattern = ["npx", ["-y", "--yes"], "weekpost", "cancel"],
+    decision = "prompt",
+    justification = "weekpost cancel: may change infrastructure or the queue (with --apply or --yes); read the command and run it yourself",
+)
+
+prefix_rule(
+    pattern = ["weekpost", "cancel"],
+    decision = "prompt",
+    justification = "weekpost cancel: may change infrastructure or the queue (with --apply or --yes); read the command and run it yourself",
+)
+
+prefix_rule(
+    pattern = ["./node_modules/.bin/weekpost", "cancel"],
+    decision = "prompt",
+    justification = "weekpost cancel: may change infrastructure or the queue (with --apply or --yes); read the command and run it yourself",
+)
+
+prefix_rule(
+    pattern = ["node", ["node_modules/weekpost/bin/weekpost.js", "./node_modules/.bin/weekpost"], "cancel"],
+    decision = "prompt",
+    justification = "weekpost cancel: may change infrastructure or the queue (with --apply or --yes); read the command and run it yourself",
+)
+
+prefix_rule(
+    pattern = ["npx", "weekpost", "restore"],
+    decision = "prompt",
+    justification = "weekpost restore: may change infrastructure or the queue (with --apply or --yes); read the command and run it yourself",
+)
+
+prefix_rule(
+    pattern = ["npx", ["-y", "--yes"], "weekpost", "restore"],
+    decision = "prompt",
+    justification = "weekpost restore: may change infrastructure or the queue (with --apply or --yes); read the command and run it yourself",
+)
+
+prefix_rule(
+    pattern = ["weekpost", "restore"],
+    decision = "prompt",
+    justification = "weekpost restore: may change infrastructure or the queue (with --apply or --yes); read the command and run it yourself",
+)
+
+prefix_rule(
+    pattern = ["./node_modules/.bin/weekpost", "restore"],
+    decision = "prompt",
+    justification = "weekpost restore: may change infrastructure or the queue (with --apply or --yes); read the command and run it yourself",
+)
+
+prefix_rule(
+    pattern = ["node", ["node_modules/weekpost/bin/weekpost.js", "./node_modules/.bin/weekpost"], "restore"],
+    decision = "prompt",
+    justification = "weekpost restore: may change infrastructure or the queue (with --apply or --yes); read the command and run it yourself",
+)
+
+prefix_rule(
+    pattern = ["npx", "weekpost", "reschedule"],
+    decision = "prompt",
+    justification = "weekpost reschedule: may change infrastructure or the queue (with --apply or --yes); read the command and run it yourself",
+)
+
+prefix_rule(
+    pattern = ["npx", ["-y", "--yes"], "weekpost", "reschedule"],
+    decision = "prompt",
+    justification = "weekpost reschedule: may change infrastructure or the queue (with --apply or --yes); read the command and run it yourself",
+)
+
+prefix_rule(
+    pattern = ["weekpost", "reschedule"],
+    decision = "prompt",
+    justification = "weekpost reschedule: may change infrastructure or the queue (with --apply or --yes); read the command and run it yourself",
+)
+
+prefix_rule(
+    pattern = ["./node_modules/.bin/weekpost", "reschedule"],
+    decision = "prompt",
+    justification = "weekpost reschedule: may change infrastructure or the queue (with --apply or --yes); read the command and run it yourself",
+)
+
+prefix_rule(
+    pattern = ["node", ["node_modules/weekpost/bin/weekpost.js", "./node_modules/.bin/weekpost"], "reschedule"],
+    decision = "prompt",
+    justification = "weekpost reschedule: may change infrastructure or the queue (with --apply or --yes); read the command and run it yourself",
+)
+
+prefix_rule(
+    pattern = ["npx", "weekpost", "resolve"],
+    decision = "prompt",
+    justification = "weekpost resolve: may change infrastructure or the queue (with --apply or --yes); read the command and run it yourself",
+)
+
+prefix_rule(
+    pattern = ["npx", ["-y", "--yes"], "weekpost", "resolve"],
+    decision = "prompt",
+    justification = "weekpost resolve: may change infrastructure or the queue (with --apply or --yes); read the command and run it yourself",
+)
+
+prefix_rule(
+    pattern = ["weekpost", "resolve"],
+    decision = "prompt",
+    justification = "weekpost resolve: may change infrastructure or the queue (with --apply or --yes); read the command and run it yourself",
+)
+
+prefix_rule(
+    pattern = ["./node_modules/.bin/weekpost", "resolve"],
+    decision = "prompt",
+    justification = "weekpost resolve: may change infrastructure or the queue (with --apply or --yes); read the command and run it yourself",
+)
+
+prefix_rule(
+    pattern = ["node", ["node_modules/weekpost/bin/weekpost.js", "./node_modules/.bin/weekpost"], "resolve"],
+    decision = "prompt",
+    justification = "weekpost resolve: may change infrastructure or the queue (with --apply or --yes); read the command and run it yourself",
+)
+
+prefix_rule(
+    pattern = ["wrangler"],
+    decision = "forbidden",
+    justification = "wrangler deploys and writes infrastructure",
+)
+
+prefix_rule(
+    pattern = ["npx", "wrangler"],
+    decision = "forbidden",
+    justification = "wrangler deploys and writes infrastructure",
+)
+
+prefix_rule(
+    pattern = ["gh", "secret"],
+    decision = "forbidden",
+    justification = "secrets are set by a human",
+)
+
+prefix_rule(
+    pattern = ["gh", "pr", "merge"],
+    decision = "forbidden",
+    justification = "the merge is the human approval",
+)
+
+prefix_rule(
+    pattern = ["gh", "pr", "ready"],
+    decision = "forbidden",
+    justification = "marking ready is the human approval",
+)
+
+prefix_rule(
+    pattern = ["gh", "api"],
+    decision = "forbidden",
+    justification = "gh api can add the preview label or change settings",
+)
+
+prefix_rule(
+    pattern = ["gh", "workflow", "run"],
+    decision = "forbidden",
+    justification = "workflows run by a human",
+)
+
+prefix_rule(
+    pattern = ["gh", "label"],
+    decision = "forbidden",
+    justification = "labels are the human approval",
+)
+
+prefix_rule(
+    pattern = ["gh", "pr", "edit"],
+    decision = "prompt",
+    justification = "adding the preview label is the human approval; check the command has no --add-label",
+)
+
+prefix_rule(
+    pattern = ["gh", "pr", "create"],
+    decision = "prompt",
+    justification = "creating a pull request with a label is the human approval; check the command has no --label",
+)
+
+prefix_rule(
+    pattern = ["script"],
+    decision = "forbidden",
+    justification = "a terminal wrapper would bypass the terminal checks",
+)
+
+prefix_rule(
+    pattern = ["expect"],
+    decision = "forbidden",
+    justification = "a terminal wrapper would bypass the terminal checks",
+)
+
+prefix_rule(
+    pattern = ["unbuffer"],
+    decision = "forbidden",
+    justification = "a terminal wrapper would bypass the terminal checks",
+)

@@ -1,0 +1,9 @@
+# Codex CLI project config (https://developers.openai.com/codex/config-basic). Codex loads it only when you trust the project.
+# The sandbox can write inside this repository and has no network; a command that needs the network (git push, gh,
+# `weekpost sources pull`) asks you first. .git, .codex and .agents stay read-only inside the sandbox.
+# The command rules are in rules/weekpost.rules.
+approval_policy = "on-request"
+sandbox_mode = "workspace-write"
+
+[sandbox_workspace_write]
+network_access = false

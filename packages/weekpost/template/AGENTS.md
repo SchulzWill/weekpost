@@ -11,6 +11,16 @@ This repository publishes a weekly social media schedule with weekpost. The cont
 - The latest open GitHub issue labeled `metrics`, if the project has one: what worked last week.
 - `skills/`: the procedures. Use `open-week` to open a week, `queue-status` to look at or change the queue and `setup-guide` to install weekpost step by step.
 
+## Skills
+
+The procedures live in `skills/<name>/SKILL.md`. If your agent does not list them on its own, read the file and follow it:
+
+- To open a week ("open the week"): read and follow `skills/open-week/SKILL.md`.
+- To look at or change the queue ("queue status"): read and follow `skills/queue-status/SKILL.md`.
+- To install weekpost step by step ("set up weekpost"): read and follow `skills/setup-guide/SKILL.md`.
+
+Claude Code finds them through `.claude/skills`, and Codex through `.agents/skills`; both are links to `skills/`.
+
 ## Commands you may run
 
 ```sh

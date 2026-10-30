@@ -38,6 +38,21 @@ describe("init: agent files", () => {
     expect(lstatSync(join(dir, ".claude/skills")).isSymbolicLink()).toBe(true);
     expect(readlinkSync(join(dir, ".claude/skills"))).toBe("../skills");
     expect(existsSync(join(dir, ".claude/skills/open-week/SKILL.md"))).toBe(true);
+    // Codex reads .agents/skills, and its project config and rules come with the template.
+    expect(lstatSync(join(dir, ".agents/skills")).isSymbolicLink()).toBe(true);
+    expect(readlinkSync(join(dir, ".agents/skills"))).toBe("../skills");
+    expect(existsSync(join(dir, ".agents/skills/open-week/SKILL.md"))).toBe(true);
+    for (const f of [".codex/config.toml", ".codex/rules/weekpost.rules"]) expect(existsSync(join(dir, f)), f).toBe(true);
+    expect(readFileSync(join(dir, "AGENTS.md"), "utf8")).toContain("skills/open-week/SKILL.md");
+  });
+
+  it("refuses to overwrite an existing .agents/skills", async () => {
+    const { dir, answers } = newProject();
+    mkdirSync(join(dir, ".agents/skills"), { recursive: true });
+    const lines: string[] = [];
+    expect(await runInit([dir, `--answers=${answers}`], { log: (l) => lines.push(l), error: (l) => lines.push(l) })).toBe(1);
+    expect(lines.join("\n")).toContain(".agents/skills");
+    expect(readdirSync(dir).sort()).toEqual([".agents", "node_modules"]);
   });
 
   it("writes a settings.json that denies every write command", () => {
@@ -65,10 +80,12 @@ describe("init: agent files", () => {
       throw new Error("EPERM");
     };
     expect(await runInit([dir, `--answers=${answers}`], { log: (l) => c.push(l), error: (l) => c.push(l) }, process.cwd(), { symlink })).toBe(0);
-    const at = join(dir, ".claude/skills");
-    expect(lstatSync(at).isSymbolicLink()).toBe(false);
-    expect(readFileSync(join(at, "open-week/SKILL.md"), "utf8")).toBe(readFileSync(join(dir, "skills/open-week/SKILL.md"), "utf8"));
-    expect(c.join("\n")).toContain("is a copy");
+    for (const link of [".claude/skills", ".agents/skills"]) {
+      const at = join(dir, link);
+      expect(lstatSync(at).isSymbolicLink(), link).toBe(false);
+      expect(readFileSync(join(at, "open-week/SKILL.md"), "utf8")).toBe(readFileSync(join(dir, "skills/open-week/SKILL.md"), "utf8"));
+    }
+    expect(c.join("\n")).toContain(".claude/skills and .agents/skills are copies");
   });
 
   it("refuses to overwrite an existing .claude/skills", async () => {
@@ -89,7 +106,7 @@ describe("init: agent files", () => {
 });
 
 describe("skills and agent files", () => {
-  const files = ["AGENTS.md", "BRIEF.md", "skills/open-week/SKILL.md", "skills/queue-status/SKILL.md"];
+  const files = ["AGENTS.md", "BRIEF.md", "skills/open-week/SKILL.md", "skills/queue-status/SKILL.md", ".codex/config.toml", ".codex/rules/weekpost.rules"];
   const text = files.map((f) => readFileSync(join(TEMPLATE_DIR, f), "utf8"));
 
   it("carry no brand, person or id", () => {
