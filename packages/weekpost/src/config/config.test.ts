@@ -4,6 +4,7 @@ import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import template from "../../template/weekpost.config.ts";
 import { ConfigError, defineConfig, loadConfig, parseConfig } from "./index.ts";
+import { defaultExport } from "./load.ts";
 
 // A fully valid config; every invalid case below changes one thing in a copy of it.
 const valid = () => ({
@@ -318,5 +319,29 @@ describe("loadConfig", () => {
   it("fails when the logo file does not exist", async () => {
     const dir = project(valid(), ["assets/fonts/inter-400.woff2", "assets/fonts/inter-800.woff2"]);
     await expect(loadConfig(dir)).rejects.toThrow("brand.logo.file: file not found: assets/logo.svg");
+  });
+});
+
+describe("defaultExport", () => {
+  const config = { brand: { name: "x" } };
+  it("reads the default export in every shape tsx can hand back", () => {
+    expect(defaultExport({ default: config })).toBe(config);
+    expect(defaultExport({ "module.exports": { default: config }, default: { default: config } })).toBe(config);
+    expect(defaultExport({ default: { default: config } })).toBe(config);
+    expect(defaultExport({ default: { __esModule: true, default: config } })).toBe(config);
+  });
+  it("returns undefined when there is no default export", () => {
+    expect(defaultExport({})).toBeUndefined();
+    expect(defaultExport(undefined)).toBeUndefined();
+  });
+});
+
+describe("defaultExport on Node 22 CommonJS interop", () => {
+  it("sees no default export when the exports object only has named exports", () => {
+    expect(defaultExport({ default: { x: 1 }, x: 1 })).toBeUndefined();
+  });
+  it("keeps an ESM default export that sits next to a named export", () => {
+    const config = { brand: { name: "x" } };
+    expect(defaultExport({ default: config, helper: 1 })).toBe(config);
   });
 });
