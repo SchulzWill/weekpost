@@ -2,38 +2,18 @@
 // Copies the template into a project directory and fills in the config from a few answers (typed in a terminal,
 // or read from --answers). Writes no secret and runs nothing outside the directory. If any file would be
 // overwritten it stops before writing anything and names the paths. It ends by running `weekpost check`.
-import { constants, copyFileSync, cpSync, lstatSync, mkdirSync, readdirSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
-import { dirname, join, relative, resolve } from "node:path";
+import { cpSync, lstatSync, mkdirSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
 import { createInterface } from "node:readline/promises";
-import { z } from "zod";
-import { configSchema, handle as handleSchema } from "../config/schema.ts";
+import type { z } from "zod";
+import { configSchema } from "../config/schema.ts";
+import { accountsConfig, answersSchema, buildLock, DEFAULT_LINK_BASE, LOCK_FILE, renderTemplate, serializeLock, type Answers } from "../setup/template.ts";
 import { runCheck, type Out } from "./check.ts";
 
-export const TEMPLATE_DIR = join(import.meta.dirname, "../../template");
-const DEFAULT_LABEL = "media-ok";
-const DEFAULT_LINK_BASE = "https://myapp.example/";
-const USAGE = "usage: weekpost init [dir] [--answers=<file.json>]";
+// The render pieces live in setup/template.ts; these re-exports keep the old import path working.
+export { answersSchema, renderConfig, renderPrivacy, renderWorkflow, templateFiles, TEMPLATE_DIR, type Answers } from "../setup/template.ts";
 
-// What init needs to know. No secrets: a file of this shape is safe for an agent to write.
-const accountAnswer = z.strictObject({
-  id: z.string().optional(),
-  handle: handleSchema,
-  lang: z.string(),
-  timeZone: z.string(),
-  hemisphere: z.enum(["north", "south"], { error: 'use "north" or "south"' }),
-  voice: z.string().optional(),
-  linkBase: z.string().optional(),
-});
-export const answersSchema = z.strictObject({
-  brandName: z.string(),
-  accounts: z.array(accountAnswer).min(1, "give at least one account"),
-  pillars: z.array(z.string()).min(1, "give at least one pillar"),
-  cta: z.array(z.string()).min(1, "give at least one CTA word or phrase"),
-  previewLabel: z.string().optional(),
-  /** E-mail or URL written into PRIVACY.md. Without it the `<CONTACT>` placeholder stays for you to fill in. */
-  contact: z.string().optional(),
-});
-export type Answers = z.infer<typeof answersSchema>;
+const USAGE = "usage: weekpost init [dir] [--answers=<file.json>]";
 
 export type InitDeps = {
   tty?: boolean;
@@ -43,33 +23,9 @@ export type InitDeps = {
   symlink?: (target: string, path: string) => void;
 };
 
-// npm drops `.gitignore` from a tarball, so the template ships it as `gitignore` and init writes `.gitignore`.
-const SHIPPED_GITIGNORE = "gitignore";
 /** `.claude/skills` points at `skills/`, so Claude Code finds the skills. npm drops symlinks too, so init creates it. */
 const SKILLS_LINK = ".claude/skills";
 const SKILLS_TARGET = "../skills";
-
-/** Every file of the template as it is written in the project (relative path), in a stable order. */
-export function templateFiles(root: string = TEMPLATE_DIR): string[] {
-  return readdirSync(root, { recursive: true, withFileTypes: true })
-    .filter((e) => e.isFile())
-    .map((e) => relative(root, join(e.parentPath, e.name)).split("\\").join("/"))
-    .map((f) => (f === SHIPPED_GITIGNORE ? ".gitignore" : f))
-    .sort();
-}
-
-const slug = (lang: string) => lang.toLowerCase().replace(/[^a-z0-9-]/g, "").slice(0, 16) || "main";
-
-function withIds(accounts: Answers["accounts"]) {
-  const used = new Set<string>();
-  return accounts.map((a) => {
-    const base = a.id ?? slug(a.lang);
-    let id = base;
-    for (let n = 2; used.has(id); n++) id = `${base.slice(0, 13)}-${n}`;
-    used.add(id);
-    return { ...a, id };
-  });
-}
 
 /** Problems with the answers, one line each (empty = fine). Uses the same rules as the config. */
 export function validateAnswers(a: Answers): string[] {
@@ -87,38 +43,6 @@ export function validateAnswers(a: Answers): string[] {
   }
   return issues;
 }
-
-function accountsConfig(a: Answers) {
-  return Object.fromEntries(
-    withIds(a.accounts).map((x) => [x.id, { handle: x.handle, lang: x.lang, timeZone: x.timeZone, hemisphere: x.hemisphere, voice: x.voice ?? "george", cta: a.cta, link: { base: x.linkBase ?? DEFAULT_LINK_BASE } }]),
-  );
-}
-
-const indent = (text: string, pad: string) => text.split("\n").map((l, i) => (i ? pad + l : l)).join("\n");
-
-function replaceOnce(source: string, pattern: RegExp, replacement: string, what: string): string {
-  if (!pattern.test(source)) throw new Error(`the template config has no ${what} to fill in (this is a bug in weekpost)`);
-  return source.replace(pattern, () => replacement);
-}
-
-/** The template config with the answers filled in. */
-export function renderConfig(template: string, a: Answers): string {
-  let out = replaceOnce(template, /name: "My App"/, `name: ${JSON.stringify(a.brandName)}`, "brand name");
-  out = replaceOnce(out, /  accounts: \{[\s\S]*?\n  \},\n/, `  accounts: ${indent(JSON.stringify(accountsConfig(a), null, 2), "  ")},\n`, "accounts");
-  const ci = a.previewLabel && a.previewLabel !== DEFAULT_LABEL ? `  ci: { previewLabel: ${JSON.stringify(a.previewLabel)} },\n` : "";
-  out = replaceOnce(out, /  pillars: \[[^\]]*\],\n/, `  pillars: ${JSON.stringify(a.pillars)},\n${ci}`, "pillars");
-  return out;
-}
-
-/** PRIVACY.md with the brand, the date and (when known) the contact in place of the placeholders. */
-export function renderPrivacy(text: string, a: Pick<Answers, "brandName" | "contact">, today: Date = new Date()): string {
-  let out = text.split("<BRAND>").join(a.brandName).split("<DATE>").join(today.toISOString().slice(0, 10));
-  if (a.contact?.trim()) out = out.split("<CONTACT>").join(a.contact.trim());
-  return out;
-}
-
-/** The workflow with the preview label of the config in place of the shipped `media-ok`. */
-export const renderWorkflow = (text: string, label: string) => (label === DEFAULT_LABEL ? text : text.split(DEFAULT_LABEL).join(label));
 
 /** Paths that would be overwritten: an existing target, or a file standing where a directory must go. */
 export function findConflicts(dir: string, files: string[]): string[] {
@@ -230,25 +154,24 @@ export async function runInit(args: string[], out: Out = console, cwd = process.
     return 1;
   }
 
-  const files = templateFiles();
-  const conflicts = findConflicts(dir, [...files, SKILLS_LINK]);
+  const today = new Date();
+  const rendered = renderTemplate(answers, { today });
+  const files = rendered.map((f) => f.path);
+  const conflicts = findConflicts(dir, [...files, LOCK_FILE, SKILLS_LINK]);
   if (conflicts.length) {
     out.error(`nothing was written: these paths already exist in ${dir}:\n${conflicts.map((c) => `  ${c}`).join("\n")}\nMove them away, or run init in an empty directory.`);
     return 1;
   }
 
-  const label = answers.previewLabel ?? DEFAULT_LABEL;
-  for (const f of files) {
-    const from = join(TEMPLATE_DIR, f === ".gitignore" ? SHIPPED_GITIGNORE : f);
-    const to = join(dir, f);
+  for (const f of rendered) {
+    const to = join(dir, f.path);
     mkdirSync(dirname(to), { recursive: true });
-    if (f === "weekpost.config.ts") writeFileSync(to, renderConfig(readFileSync(from, "utf8"), answers), { flag: "wx" });
-    else if (f === "PRIVACY.md") writeFileSync(to, renderPrivacy(readFileSync(from, "utf8"), answers), { flag: "wx" });
-    else if (f.startsWith(".github/workflows/")) writeFileSync(to, renderWorkflow(readFileSync(from, "utf8"), label), { flag: "wx" });
-    else copyFileSync(from, to, constants.COPYFILE_EXCL);
+    writeFileSync(to, f.content, { flag: "wx" });
   }
+  // The hashes are of the bytes just written: `upgrade` tells a file you edited from one it can safely replace.
+  writeFileSync(join(dir, LOCK_FILE), serializeLock(buildLock(rendered, answers, today)), { flag: "wx" });
   const linked = linkSkills(dir, deps.symlink ?? ((t, p) => symlinkSync(t, p, "dir")));
-  out.log(`wrote ${files.length} files to ${dir}${linked === "copy" ? " (.claude/skills is a copy of skills/: symbolic links are not available here, so keep the two in step)" : ""}`);
+  out.log(`wrote ${files.length} files and ${LOCK_FILE} to ${dir}${linked === "copy" ? " (.claude/skills is a copy of skills/: symbolic links are not available here, so keep the two in step)" : ""}`);
 
   out.log("\nRunning weekpost check:");
   const checked = await runCheck([`--project=${dir}`], out, cwd);
