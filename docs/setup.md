@@ -2,9 +2,7 @@
 
 The guided setup, from an empty folder to a first public post. Back to the [README](../README.md).
 
-Prefer a guided setup? Ask your agent to run the `setup-guide` skill.
-
-This is the guided path. A first-timer who follows it in order should finish in about three hours, most of it creating accounts. Every command below is a `weekpost` subcommand; `npx weekpost` alone prints the list of commands and their options.
+This is the guided path. If your agent is Claude Code or Codex, you can ask it to run the `setup-guide` skill instead. A first-timer who follows it in order should finish in about three hours, most of it creating accounts. Every command below is a `weekpost` subcommand; `npx weekpost` alone prints the list of commands and their options.
 
 ### 1. Before you start
 
@@ -15,30 +13,37 @@ You need:
 - A professional (Business or Creator) Instagram account that you own or manage. A personal account cannot publish through the API.
 - A public web page for a privacy policy (any URL you control; a one-page site or a repository page is enough). Meta asks for its address when you create the app (step 4).
 
-What it costs to run, by the numbers in this README:
+What it costs to run (details in [What it could cost](../README.md#what-it-could-cost)):
 
 | Item | Cost |
 |---|---|
 | Supabase (queue and media bucket) | free plan is enough |
 | Cloudflare Workers (publisher, one cron every 5 minutes) | free plan is enough |
 | Meta app and Instagram publishing | free |
-| GitHub Actions | free minutes on a public repository; private repositories spend minutes, see [Cost of running it](cost.md#cost-of-running-it) |
-| Images, narration and the image check (OpenRouter) | pay per use, about US$0.43 for the example week, capped per week (default US$5), see [What a week costs](cost.md#what-a-week-costs) |
+| GitHub Actions | free minutes on a public repository; private repositories spend minutes |
+| Images, narration and the image check (OpenRouter) | pay per use, about US$0.82 measured for the example week, capped per week (default US$5) |
 
 Use an OpenRouter key with a credit limit. `weekpost doctor` warns when the key has none.
 
 ### 2. Install
 
-weekpost ships as a tarball attached to each release; the template that `init` copies is inside it. `npx weekpost --version` prints the installed version, and [CHANGELOG.md](../CHANGELOG.md) lists what each release changes. Until the first release is published, build the tarball yourself with `npm pack` in `packages/weekpost` of this repository.
+weekpost ships as a tarball; the template that `init` copies is inside it. There is no release yet, so build the tarball from a clone of this repository first (this is the path that works today; a release will add a download URL):
+
+```sh
+git clone https://github.com/SchulzWill/weekpost.git
+(cd weekpost/packages/weekpost && npm pack --pack-destination ..)   # writes weekpost/weekpost-<version>.tgz
+```
+
+`npx weekpost --version` prints the installed version, and [CHANGELOG.md](../CHANGELOG.md) lists what each release changes.
 
 ```sh
 mkdir my-brand-social && cd my-brand-social
 git init && npm init -y
-npm i <tarball URL from the latest release>
+npm i /path/to/weekpost/weekpost-<version>.tgz
 npx playwright install chromium
 ```
 
-The local secrets file is named after the folder and a short hash of its full path, like `~/.config/weekpost/my-brand-social-1a2b3c4d.env`, so two folders with the same name never share secrets. A file written under the old name (`my-brand-social.env`) is copied to the new one the first time `setup --apply` or a command that reads it runs, with a warning. Installing downloads `ffmpeg-static`, about 44 MB.
+The local secrets file is named after the folder and a short hash of its full path, like `~/.config/weekpost/my-brand-social-1a2b3c4d.env`, so two folders with the same name never share secrets. Installing downloads `ffmpeg-static`, about 44 MB.
 
 ### 3. Start the project
 
@@ -116,7 +121,7 @@ npx weekpost token <account>
 npx weekpost doctor
 ```
 
-Read-only. Prints `ok`, `warn` or `fail` for each check and, under each problem, the command that fixes it. Exit code 1 if anything fails. Run it again whenever something looks wrong; `--json` gives the same result for scripts. See [Troubleshooting](#troubleshooting).
+Read-only. Prints `ok`, `warn` or `fail` for each check and, under each problem, the command that fixes it. Exit code 1 if anything fails. Run it again whenever something looks wrong; `--json` gives the same result for scripts. See [Troubleshooting](troubleshooting.md).
 
 ### 8. Publish a first post
 
@@ -137,34 +142,4 @@ This publishes a **public** card with your brand name and handle on the real acc
 
 How the layers that keep the agent away from your keys work is in [Security](security.md). What each workflow does is in [What the workflows do](operate.md#what-the-workflows-do).
 
-## Troubleshooting
-
-`doctor` prints the check id before each message; `first-post` prints an explanation when the Worker fails.
-
-| You see | Likely cause | What to do |
-|---|---|---|
-| `node: ... needs 22 or newer` | old Node | install Node 22 or later |
-| `chromium` fails | Playwright browser missing | `npx weekpost setup --apply --only=project.deps` |
-| `logins` fails: not logged in | `gh` or `wrangler` has no session | `gh auth login` and `npx wrangler@4 login`, then `doctor` again (step 4) |
-| `openrouter`: key rejected | wrong or revoked key | create a new key, then `npx weekpost setup --apply --only=github.secrets` |
-| `openrouter` warns: no credit limit | key without a cap | set a limit at openrouter.ai/settings/keys |
-| `supabase.key`: publishable key | you copied the wrong key | copy the `sb_secret_...` key (step 4), then `npx weekpost setup --apply --only=local.secrets` |
-| `supabase.schema` fails | migrations not applied | `npx weekpost setup --apply --only=db.migrate` (or `--print` and paste the SQL) |
-| `supabase.bucket` fails | bucket missing | `npx weekpost setup --apply --only=storage.bucket` |
-| `worker.deployed` fails | not deployed, or not logged in to Cloudflare | `npx weekpost setup --apply --only=worker.deploy` |
-| `secrets.worker`, `secrets.actions`, `secrets.environment` or `secrets.local` fail | a secret was not set | `npx weekpost setup --apply --only=<that check's step>`: `worker.secrets`, `github.secrets`, `github.environment`, `local.secrets` |
-| `github.label` fails | label missing (or `origin` is not a GitHub repository) | push to GitHub, then `npx weekpost setup --apply --only=github.label` |
-| `github.workflows`: not pinned to a commit SHA | a workflow uses a tag | replace each tag with the full commit SHA of that release |
-| `token.<account>`: no token saved | step 6 not done | `npx weekpost token <account>` |
-| `token.<account>`: Instagram did not accept the token | expired or revoked | generate a new token in the Meta panel, then `npx weekpost token <account>` |
-| `token.<account>`: belongs to another handle | token from another account | generate the token while the right account is selected |
-| `token.<account>`: cannot publish | missing `instagram_business_content_publish` | generate it again with both permissions (step 4.5) |
-| `token.<account>`: expires in N days | renewal not happening | check the Worker (`worker.deployed`) and the logs ([Reading the Worker logs](operate.md#reading-the-worker-logs)) |
-| `graph.version` warns | the Graph API version weekpost uses is near its end | update weekpost |
-| `first-post`: needs a terminal | run from an agent shell or a script | run it yourself in a terminal; `--yes` does not replace the terminal |
-| `first-post`: no Instagram token | step 6 not done | `npx weekpost token <account>`, then `npx weekpost restore <post-id> --account=<account>` |
-| `first-post`: Instagram refused the token, or the token cannot publish | expired, or wrong permissions | new token with both permissions, `npx weekpost token <account>` |
-| `first-post`: Instagram rejected the image | not a professional account, or Meta-side problem | check the account type (step 1) and try again |
-| `first-post`: the Worker could not read the media or the database | Worker secrets wrong | `npx weekpost setup --apply --only=worker.secrets` |
-| `first-post`: timed out, still scheduled | the Worker has not run | `npx weekpost doctor` (`worker.deployed`), `npx weekpost status`, and the Worker logs |
-| `first-post`: canceled | post was canceled | `npx weekpost restore <post-id> --account=<account>` |
+Something failed? [Troubleshooting](troubleshooting.md) has a table by error.
