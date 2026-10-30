@@ -94,7 +94,11 @@ export const renderWorkflow = (text: string, label: string) => (label === DEFAUL
 
 
 export const LOCK_FILE = "weekpost.lock.json";
-export type Lock = { lockVersion: 1; weekpost: string; files: Record<string, string> };
+/**
+ * `answers` and `renderedOn` are what `renderTemplate` needs to produce the same bytes again (no secrets in them);
+ * `renderedOn` is the day written into PRIVACY.md.
+ */
+export type Lock = { lockVersion: 1; weekpost: string; renderedOn: string; answers: Answers; files: Record<string, string> };
 export type RenderedFile = { path: string; content: Buffer };
 
 /** The installed weekpost version, from the package.json that ships next to `template/`. */
@@ -123,9 +127,9 @@ export function renderTemplate(answers: Answers, opts: { root?: string; today?: 
 export const sha256 = (content: Buffer | string) => createHash("sha256").update(content).digest("hex");
 
 /** The lock for files as they were written: the version and the sha256 of each. */
-export function buildLock(files: RenderedFile[], version: string = packageVersion()): Lock {
+export function buildLock(files: RenderedFile[], answers: Answers, today: Date = new Date(), version: string = packageVersion()): Lock {
   const entries = files.map((f) => [f.path, sha256(f.content)] as const).sort(([a], [b]) => (a < b ? -1 : 1));
-  return { lockVersion: 1, weekpost: version, files: Object.fromEntries(entries) };
+  return { lockVersion: 1, weekpost: version, renderedOn: today.toISOString().slice(0, 10), answers, files: Object.fromEntries(entries) };
 }
 
 export const serializeLock = (lock: Lock) => `${JSON.stringify(lock, null, 2)}\n`;

@@ -154,7 +154,8 @@ export async function runInit(args: string[], out: Out = console, cwd = process.
     return 1;
   }
 
-  const rendered = renderTemplate(answers);
+  const today = new Date();
+  const rendered = renderTemplate(answers, { today });
   const files = rendered.map((f) => f.path);
   const conflicts = findConflicts(dir, [...files, LOCK_FILE, SKILLS_LINK]);
   if (conflicts.length) {
@@ -168,7 +169,7 @@ export async function runInit(args: string[], out: Out = console, cwd = process.
     writeFileSync(to, f.content, { flag: "wx" });
   }
   // The hashes are of the bytes just written: `upgrade` tells a file you edited from one it can safely replace.
-  writeFileSync(join(dir, LOCK_FILE), serializeLock(buildLock(rendered)), { flag: "wx" });
+  writeFileSync(join(dir, LOCK_FILE), serializeLock(buildLock(rendered, answers, today)), { flag: "wx" });
   const linked = linkSkills(dir, deps.symlink ?? ((t, p) => symlinkSync(t, p, "dir")));
   out.log(`wrote ${files.length} files and ${LOCK_FILE} to ${dir}${linked === "copy" ? " (.claude/skills is a copy of skills/: symbolic links are not available here, so keep the two in step)" : ""}`);
 

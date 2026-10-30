@@ -51,6 +51,15 @@ describe("weekpost.lock.json", () => {
     expect(lock.files[".github/workflows/weekpost-preview.yml"]).toBe(sha(readFileSync(join(dir, ".github/workflows/weekpost-preview.yml"))));
   });
 
+  it("stores the answers and the day, and rendering them again gives exactly the hashes of the lock", async () => {
+    const dir = await initIn({ ...ANSWERS, contact: "hi@shop.example" });
+    const lock = JSON.parse(readFileSync(join(dir, LOCK_FILE), "utf8"));
+    expect(lock.answers).toMatchObject({ brandName: "Shop & Co", previewLabel: "ok-to-render", contact: "hi@shop.example" });
+    expect(lock.renderedOn).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    const again = renderTemplate(lock.answers, { today: new Date(lock.renderedOn) });
+    expect(Object.fromEntries(again.map((f) => [f.path, sha(f.content)]))).toEqual(lock.files);
+  });
+
   it("does not list itself and ends with a newline", async () => {
     const dir = await initIn(ANSWERS);
     const text = readFileSync(join(dir, LOCK_FILE), "utf8");
@@ -59,7 +68,7 @@ describe("weekpost.lock.json", () => {
   });
 
   it("buildLock sorts paths so the file is stable", () => {
-    const lock = buildLock([{ path: "b", content: Buffer.from("1") }, { path: "a", content: Buffer.from("2") }], "9.9.9");
+    const lock = buildLock([{ path: "b", content: Buffer.from("1") }, { path: "a", content: Buffer.from("2") }], ANSWERS, new Date("2026-01-02T00:00:00Z"), "9.9.9");
     expect(Object.keys(lock.files)).toEqual(["a", "b"]);
     expect(lock.weekpost).toBe("9.9.9");
   });
