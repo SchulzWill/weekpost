@@ -11,8 +11,8 @@ const post = (over: Partial<QueueRow> = {}): QueueRow => ({
 });
 const base = (over: Partial<ReportInput> = {}): ReportInput => ({
   now: NOW,
-  collected: { rows: [], issues: [], accounts: ["en"] },
-  posts: [], failed: [], stuck: [], overdue: [], manual: [],
+  collected: { rows: [], issues: [], accounts: ["en"], posts: [] },
+  failed: [], stuck: [], overdue: [], manual: [],
   tokens: [{ account: "en", expiresAt: "2027-01-01T00:00:00Z" }],
   graph: { version: "v26.0", level: "ok", detail: "v26.0 is the latest version" },
   extra: null,
@@ -53,7 +53,7 @@ describe("buildReport", () => {
       { scope: "post" as const, postId: "2026-10-27-a", account: "en", collectedOn: "2026-11-02", metric: "reach", value: 29 },
       { scope: "post" as const, postId: "2026-10-27-a", account: "en", collectedOn: "2026-11-02", metric: "ig_reels_avg_watch_time", value: 3916 },
     ];
-    const md = buildReport(base({ collected: { rows, issues: [], accounts: ["en"] }, posts: [post()] }));
+    const md = buildReport(base({ collected: { rows, issues: [], accounts: ["en"], posts: [post()] } }));
     expect(md).toContain("| en | 10 | 11 | 12 | 13 | 14 | 15 | 16 |");
     expect(md).toContain("| en | [2026-10-27-a](https://www.instagram.com/reel/abc/) | reel | 29 | — | — | — | — | — | 3.9 |");
   });
@@ -65,7 +65,7 @@ describe("buildReport", () => {
 
   it("does not render a permalink that is not https", () => {
     const rows = [{ scope: "post" as const, postId: "2026-10-27-a", account: "en", collectedOn: "2026-11-02", metric: "reach", value: 1 }];
-    const md = buildReport(base({ collected: { rows, issues: [], accounts: ["en"] }, posts: [post({ permalink: "javascript:alert(1)" })] }));
+    const md = buildReport(base({ collected: { rows, issues: [], accounts: ["en"], posts: [post({ permalink: "javascript:alert(1)" })] } }));
     expect(md).not.toContain("javascript:");
   });
 });
@@ -93,13 +93,13 @@ describe("Attention, one item at a time", () => {
     expect(attention({ tokens: [{ account: "en", expiresAt: "2026-11-15T00:00:00Z" }] })[0]).toContain("npx weekpost token en");
   });
   it("token without the Insights permission", () => {
-    const l = attention({ collected: { rows: [], accounts: ["en"], issues: [issue("no-permission")] } })[0]!;
+    const l = attention({ collected: { rows: [], accounts: ["en"], posts: [], issues: [issue("no-permission")] } })[0]!;
     expect(l).toContain("instagram_business_manage_insights");
     expect(l).toContain("npx weekpost token en");
   });
   it("token rejected by Meta and account without a token", () => {
-    expect(attention({ collected: { rows: [], accounts: ["en"], issues: [issue("token", { detail: "Instagram 190: expired" })] } })[0]).toContain("Meta rejected the token");
-    expect(attention({ collected: { rows: [], accounts: ["pt"], issues: [issue("no-token", { account: "pt" })] } })[0]).toContain("No token for `pt`");
+    expect(attention({ collected: { rows: [], accounts: ["en"], posts: [], issues: [issue("token", { detail: "Instagram 190: expired" })] } })[0]).toContain("Meta rejected the token");
+    expect(attention({ collected: { rows: [], accounts: ["pt"], posts: [], issues: [issue("no-token", { account: "pt" })] } })[0]).toContain("No token for `pt`");
   });
   it("Graph API close to the end", () => {
     expect(attention({ graph: { version: "v24.0", level: "warn", detail: "v24.0 stops being available on 2028-02-18 (100 days)" } })[0]).toContain("Graph API version");
@@ -111,7 +111,7 @@ describe("Attention, one item at a time", () => {
   });
   it("missing data: rate limit, no media id, empty, error", () => {
     const issues = [issue("rate-limit", { detail: "Instagram 80002: limit" }), issue("no-media-id", { postId: "2026-10-27-a" }), issue("empty", { postId: "2026-10-28-b" }), issue("error", { postId: "2026-10-29-c", detail: "boom" })];
-    const l = attention({ collected: { rows: [], accounts: ["en"], issues } });
+    const l = attention({ collected: { rows: [], accounts: ["en"], posts: [], issues } });
     expect(l).toHaveLength(4);
     expect(l[0]).toContain("rate limit (80002)");
     expect(l[1]).toContain("Published without a media id");
