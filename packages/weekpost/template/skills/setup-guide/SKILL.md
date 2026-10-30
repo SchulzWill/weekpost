@@ -47,7 +47,7 @@ Direct links open the dashboard home or the official docs. Do not describe deepe
 **Meta app with Instagram Login** ([apps](https://developers.facebook.com/apps), [docs](https://developers.facebook.com/docs/instagram-platform/instagram-api-with-instagram-login))
 - Needs a professional (Business or Creator) Instagram account they own, and a public page for a privacy policy.
 - Create an app whose use case manages content on Instagram ("Instagram API with Instagram Login"), set the Privacy Policy URL, add the Instagram account as a tester and accept the invitation in the Instagram app.
-- Generate the token for that account with `instagram_business_basic` and `instagram_business_content_publish`, and copy it. Leave the app in development mode.
+- Generate the token for that account with `instagram_business_basic`, `instagram_business_content_publish` and `instagram_business_manage_insights` (the last is only for `weekpost metrics`), and copy it. Leave the app in development mode.
 - Then the person runs `npx weekpost token <account>` (the account id from `weekpost.config.ts`), one account at a time. It reads the clipboard; `--prompt` uses a hidden prompt.
 
 The weekpost repository (https://github.com/SchulzWill/weekpost) has the full steps in `docs/setup.md` and the error table in `docs/troubleshooting.md`.

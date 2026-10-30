@@ -18,6 +18,7 @@ import { runSources } from "./sources.ts";
 import { runFirstPost } from "./firstPost.ts";
 import { runSetup } from "./setup.ts";
 import { runDoctor } from "./doctor.ts";
+import { runMetrics } from "./metrics.ts";
 import { readFileSync } from "node:fs";
 
 // The version of the installed package, read from its package.json.
@@ -46,6 +47,7 @@ commands:
   sources pull <YYYY-Www>  write content/<week>/sources.json from the configured sources (the week before; --limit=20, --root=content, --project=<dir>)
   setup --plan|--apply  list the setup steps and what is done (--plan, --json), or run them at a terminal after asking (--apply, --only=<step-id>)
   doctor                check, without writing anything, that the setup works and say what to run for each failure (--json)
+  metrics               read Instagram Insights and print the weekly report (--write to store it, --issue to post it as an issue, --json)
   first-post <account>  publish one public test post through your own Worker and wait for the permalink (--caption=<text>, --yes, --timeout=15 minutes)
   --version             print the installed version
   agent-env             exit 1 if this environment holds infrastructure secrets (names only are printed)
@@ -86,6 +88,8 @@ export async function main(argv: string[]): Promise<number> {
       return runToken(rest);
     case "sources":
       return runSources(rest);
+    case "metrics":
+      return runMetrics(rest);
     case "first-post":
       return runFirstPost(rest);
     case "setup":

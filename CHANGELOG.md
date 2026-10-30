@@ -12,6 +12,7 @@ How a release is cut: see [Releasing](docs/releasing.md).
 
 ### Improvements
 
+- `weekpost metrics` reads Instagram Insights and prints a weekly report with an Attention list; `--write` stores the numbers, `--issue` keeps one issue per week, `--json` prints the data. The two writing flags are denied to the agent in the template. Reading Insights needs the `instagram_business_manage_insights` permission: tokens made before this release lack it, so generate a new one and run `weekpost token <account>` (publishing is not affected).
 - `weekpost init` writes `weekpost.lock.json`: the weekpost version, the answers (no secrets) and a sha256 for each generated file. Commit it; a later upgrade uses it to tell the files you edited from the ones it can replace.
 - New `weekpost_metrics` table (migration 0005) and queue-adapter reads for Instagram Insights.
 - `weekpost --version` prints the installed version.

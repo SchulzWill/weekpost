@@ -31,7 +31,10 @@ npx weekpost reschedule <post-id> --account=en --at="2026-11-09 18:30" --rearm  
 npx weekpost resolve <post-id> --account=en --published=<permalink>      # stuck in publishing: it did go out
 npx weekpost resolve <post-id> --account=en --not-published              # stuck in publishing: it did not
 npx weekpost package 2026-W45            # caption, time and media per post, for posting by hand (Stories)
+npx weekpost metrics                     # read Instagram Insights and print the weekly report (writes nothing)
 ```
+
+`metrics` reads Insights for the posts of the last 14 days and for each account (7-day totals and followers), and prints the report: account, posts, extra numbers and an Attention list (failed or stuck posts, a stopped queue, tokens close to expiry, a token without the Insights permission, Stories to post by hand, missing data), each line with the command that fixes it. `--write` stores the numbers in `weekpost_metrics`; `--issue` rewrites the issue `weekpost metrics: <YYYY-Www>` (label `metrics`; it reads `GITHUB_REPOSITORY` and `GITHUB_TOKEN`, or `--repo=<owner/name>`); `--json` prints the data. Both `--write` and `--issue` are denied to the agent and meant for CI. Missing data never fails the run: it becomes an Attention line. Reading Insights needs the `instagram_business_manage_insights` permission on the token.
 
 `token` needs a terminal (it refuses to run from an agent shell). Copy the long-lived token from the Meta panel and run `npx weekpost token en`: it reads the clipboard (or a hidden prompt with `--prompt`), confirms on the Graph API that the token belongs to the account's handle and may publish, saves it in `weekpost_tokens` (59 days) and clears the clipboard. It never prints the token.
 

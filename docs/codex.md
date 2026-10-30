@@ -15,7 +15,7 @@ What `init` writes for Codex:
 - `AGENTS.md` has a "Skills" section naming each skill file, so discovery does not depend on anything else.
 - `.agents/skills` is a link to `skills/`, the folder Codex scans for skills. (Whether Codex follows a link there is not documented; the "Skills" section covers it.)
 - `.codex/config.toml` sets `approval_policy = "on-request"`, `sandbox_mode = "workspace-write"` and `network_access = false`.
-- `.codex/rules/weekpost.rules` has `prefix_rule` entries. `forbidden` blocks `setup --apply`, `token`, `first-post`, `enqueue`, `wrangler`, `gh secret`, `gh pr merge`, `gh pr ready`, `gh api`, `gh workflow run` and `gh label`. `prompt` asks you first for the other `setup` forms, `cancel`, `restore`, `reschedule`, `resolve` (the `--yes` forms) and `gh pr edit` / `gh pr create` (which could add the preview label).
+- `.codex/rules/weekpost.rules` has `prefix_rule` entries. `forbidden` blocks `setup --apply`, `token`, `first-post`, `enqueue`, `wrangler`, `gh secret`, `gh pr merge`, `gh pr ready`, `gh api`, `gh workflow run` and `gh label`. `prompt` asks you first for the other `setup` forms, `cancel`, `restore`, `reschedule`, `resolve` (the `--yes` forms), `metrics` (because of `--write` and `--issue`) and `gh pr edit` / `gh pr create` (which could add the preview label).
 
 If you would rather not trust the project config, put the same keys in `~/.codex/config.toml` and copy the rules file to `~/.codex/rules/weekpost.rules`. Check one command with `codex execpolicy check --pretty --rules .codex/rules/weekpost.rules -- npx weekpost token en`.
 
