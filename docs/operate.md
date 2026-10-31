@@ -34,7 +34,15 @@ npx weekpost package 2026-W45            # caption, time and media per post, for
 npx weekpost metrics                     # read Instagram Insights and print the weekly report (writes nothing)
 ```
 
-`metrics` reads Insights for the posts of the last 14 days and for each account (7-day totals and followers), and prints the report: account, posts, extra numbers and an Attention list (failed or stuck posts, a stopped queue, tokens close to expiry, a token without the Insights permission, Stories to post by hand, missing data), each line with the command that fixes it. `--write` stores the numbers in `weekpost_metrics`; `--issue` rewrites the issue `weekpost metrics: <YYYY-Www>` (label `metrics`; it reads `GITHUB_REPOSITORY` and `GITHUB_TOKEN`, or `--repo=<owner/name>`); `--json` prints the data. Both `--write` and `--issue` are denied to the agent and meant for CI. Missing data never fails the run: it becomes an Attention line. Reading Insights needs the `instagram_business_manage_insights` permission on the token.
+`metrics` reads Instagram Insights and prints a weekly report:
+
+- **What it reads:** the posts of the last 14 days, and for each account the totals of the last 7 days plus the follower count.
+- **What it prints:** per account, the posts and some extra numbers, then an Attention list (failed or stuck posts, a stopped queue, tokens close to expiry, a token without the Insights permission, Stories to post by hand, missing data). Each line comes with the command that fixes it.
+- `--json` prints the data instead of the text.
+- `--write` stores the numbers in `weekpost_metrics`.
+- `--issue` creates or rewrites one GitHub issue per week, titled `weekpost metrics: <YYYY-Www>` (label `metrics`). It needs the repository and a token that may write issues: from `GITHUB_REPOSITORY` and `GITHUB_TOKEN`, or `--repo=<owner/name>`. To run it yourself: `GITHUB_TOKEN=$(gh auth token) npx weekpost metrics --issue --repo=<owner/name>`.
+- A scheduled Action for `--write` and `--issue` is not shipped yet; run them yourself. They are blocked for Claude Code, and Codex asks you.
+- Missing data never fails the run: it becomes an Attention line. Reading Insights needs the `instagram_business_manage_insights` permission on the token.
 
 `token` needs a terminal (it refuses to run from an agent shell). Copy the long-lived token from the Meta panel and run `npx weekpost token en`: it reads the clipboard (or a hidden prompt with `--prompt`), confirms on the Graph API that the token belongs to the account's handle and may publish, saves it in `weekpost_tokens` (59 days) and clears the clipboard. It never prints the token.
 
@@ -69,7 +77,7 @@ The Worker logs one JSON line per event. In the Cloudflare dashboard, open the W
 | `ERROR_maintenance` | cleaning old media or looking for stuck posts failed | usually temporary; check the Supabase status if it repeats |
 | `ERROR_run` | the whole run failed | read the `error` field; usually a wrong URL or key |
 
-A post that fails but is still retried logs `post_failed` without the `ERROR` prefix. When it fails for good, `status --failed` lists it with the reason. The Worker does not notify you: until the metrics Action exists, run `status --failed` after publishing days.
+A post that fails but is still retried logs `post_failed` without the `ERROR` prefix. When it fails for good, `status --failed` lists it with the reason. The Worker does not notify you: until a scheduled metrics Action exists, run `status --failed` (or `metrics`) after publishing days.
 
 ## Limits
 

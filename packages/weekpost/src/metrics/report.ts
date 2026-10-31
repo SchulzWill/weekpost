@@ -143,7 +143,7 @@ export function attentionLines(i: ReportInput): string[] {
     }
   }
   for (const m of i.collected.issues.filter((x) => x.kind === "no-permission")) {
-    out.push(`- **Token of \`${clean(m.account)}\` cannot read Insights** (needs \`instagram_business_manage_insights\`). Run \`npx weekpost token ${clean(m.account)}\` with that permission granted; posts still publish.`);
+    out.push(`- **Token of \`${clean(m.account)}\` cannot read Insights.** In the Meta panel, generate a new token with \`instagram_business_manage_insights\` added, then run \`npx weekpost token ${clean(m.account)}\`. Posts still publish.`);
   }
   for (const m of i.collected.issues.filter((x) => x.kind === "token")) {
     out.push(`- **Meta rejected the token of \`${clean(m.account)}\`:** ${clean(m.detail)}. Run \`npx weekpost token ${clean(m.account)}\`.`);

@@ -1,6 +1,6 @@
 # Troubleshooting
 
-When `doctor` or `first-post` reports a problem. Back to the [README](../README.md) or the [setup guide](setup.md).
+When `doctor`, `first-post` or `metrics` reports a problem. Back to the [README](../README.md) or the [setup guide](setup.md).
 
 `doctor` prints the check id before each message; `first-post` prints an explanation when the Worker fails.
 
@@ -21,8 +21,8 @@ When `doctor` or `first-post` reports a problem. Back to the [README](../README.
 | `token.<account>`: no token saved | step 6 not done | `npx weekpost token <account>` |
 | `token.<account>`: Instagram did not accept the token | expired or revoked | generate a new token in the Meta panel, then `npx weekpost token <account>` |
 | `token.<account>`: belongs to another handle | token from another account | generate the token while the right account is selected |
-| `token.<account>`: cannot publish | missing `instagram_business_content_publish` | generate it again with both permissions (step 4.5 of [setup](setup.md#4-create-the-accounts)) |
-| `metrics`: Attention line "cannot read Insights" | the token lacks `instagram_business_manage_insights` (publishing still works) | generate the token again with all three permissions (step 4.5 of [setup](setup.md#4-create-the-accounts)), then `npx weekpost token <account>` |
+| `token.<account>`: cannot publish | missing `instagram_business_content_publish` | generate it again with both permissions (item 5 of [step 4](setup.md#4-create-the-accounts)) |
+| `metrics`: Attention line "cannot read Insights" | the token lacks `instagram_business_manage_insights` (publishing still works) | generate the token again with all three permissions (item 5 of [step 4](setup.md#4-create-the-accounts)), then `npx weekpost token <account>` |
 | `token.<account>`: expires in N days | renewal not happening | check the Worker (`worker.deployed`) and the logs ([Reading the Worker logs](operate.md#reading-the-worker-logs)) |
 | `graph.version` warns | the Graph API version weekpost uses is near its end | update weekpost |
 | `first-post`: needs a terminal | run from an agent shell or a script | run it yourself in a terminal; `--yes` does not replace the terminal |
