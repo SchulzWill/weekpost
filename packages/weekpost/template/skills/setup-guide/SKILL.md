@@ -50,7 +50,7 @@ Direct links open the dashboard home or the official docs. Do not describe deepe
 - Generate the token for that account with `instagram_business_basic` and `instagram_business_content_publish`, and copy it. Leave the app in development mode.
 - Then the person runs `npx weekpost token <account>` (the account id from `weekpost.config.ts`), one account at a time. It reads the clipboard; `--prompt` uses a hidden prompt.
 
-The README sections "Set it up" and "Troubleshooting" have the full steps.
+The weekpost repository (https://github.com/SchulzWill/weekpost) has the full steps in `docs/setup.md` and the error table in `docs/troubleshooting.md`.
 
 ## Order of the commands
 
@@ -86,7 +86,7 @@ A `warn` is not a blocker: say what it means and go on.
 
 When `doctor` exits 0, tell the person to run in their terminal: `npx weekpost first-post <account>`. It publishes a public test post through their own Worker and waits for the link (allow up to 15 minutes, the Worker runs every 5). Ask them for the permalink it prints, confirm the post is public, and remind them they can delete it. Then point to the next skill: "open the week".
 
-If `first-post` fails, match the message with the `first-post` rows of the README Troubleshooting table.
+If `first-post` fails, match the message with the `first-post` rows of the table in `docs/troubleshooting.md` (weekpost repository).
 
 ## Never
 

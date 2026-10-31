@@ -120,12 +120,12 @@ describe("weekpost first-post", () => {
     expect(t.clockNow() - START).toBeLessThan(3 * 60_000);
   });
 
-  it("on failure prints the translated reason and the README step", async () => {
+  it("on failure prints the translated reason and the setup step", async () => {
     const t = setup({ after: { status: "failed", lastError: "no Instagram token for account en" } });
     expect(await runFirstPost(["en", "--caption=Hi"], t.out, "/x", t.deps)).toBe(1);
     const text = t.lines.join("\n");
     expect(text).toContain("weekpost token en");
-    expect(text).toContain("step 4");
+    expect(text).toContain("docs/setup.md, step 6");
   });
 
   it("running it again the same day does not queue a second post", async () => {
@@ -168,7 +168,7 @@ describe("firstPostId and explainFailure", () => {
   it("is deterministic per day", () => {
     expect(firstPostId("2026-10-30")).toBe("2026-10-30-weekpost-first-post");
   });
-  it("maps known worker errors to README steps and keeps unknown ones", () => {
+  it("maps known worker errors to setup steps and keeps unknown ones", () => {
     expect(explainFailure("Instagram (#190): Invalid OAuth access token", "en")).toMatch(/weekpost token en/);
     expect(explainFailure("Instagram (#10): permission missing", "en")).toMatch(/instagram_business_content_publish/);
     expect(explainFailure("Meta marked the container as ERROR", "en")).toMatch(/JPEG|image/i);
