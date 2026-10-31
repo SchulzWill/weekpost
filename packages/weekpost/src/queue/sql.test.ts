@@ -1,4 +1,4 @@
-// SQL suite for migrations/0001 to 0004. Needs a real Postgres (not part of `npm test`):
+// SQL suite for migrations/0001 to 0005. Needs a real Postgres (not part of `npm test`):
 //   docker run -d --name weekpost-test-pg -e POSTGRES_PASSWORD=postgres -p 55432:5432 postgres:17-alpine
 //   WEEKPOST_TEST_DATABASE_URL=postgres://postgres:postgres@localhost:55432/postgres npm run test:db
 // The suite creates and drops its own databases (prefix wp_test_) and the Supabase-style roles
@@ -12,6 +12,7 @@ const MIGRATION_1 = readFileSync(new URL("../../migrations/0001_queue.sql", impo
 const MIGRATION_2 = readFileSync(new URL("../../migrations/0002_media_hash.sql", import.meta.url), "utf8");
 const MIGRATION_3 = readFileSync(new URL("../../migrations/0003_stale_runs.sql", import.meta.url), "utf8");
 const MIGRATION_4 = readFileSync(new URL("../../migrations/0004_operator_functions.sql", import.meta.url), "utf8");
+const MIGRATION_5 = readFileSync(new URL("../../migrations/0005_metrics.sql", import.meta.url), "utf8");
 const ROLES = ["service_role", "anon", "authenticated"];
 const PREFIX = "wp_test_";
 
@@ -44,7 +45,7 @@ async function connect(db: string): Promise<Client> {
 }
 
 /** Creates a fresh database and applies the migrations (only the first when `upTo` is 1, the first two when 2). */
-async function freshDb(upTo = 4): Promise<Client> {
+async function freshDb(upTo = 5): Promise<Client> {
   const name = `${PREFIX}${process.pid}_${counter++}`;
   await admin.query(`create database ${name}`);
   const c = await connect(name);
@@ -52,6 +53,7 @@ async function freshDb(upTo = 4): Promise<Client> {
   if (upTo >= 2) await c.query(MIGRATION_2);
   if (upTo >= 3) await c.query(MIGRATION_3);
   if (upTo >= 4) await c.query(MIGRATION_4);
+  if (upTo >= 5) await c.query(MIGRATION_5);
   return c;
 }
 
@@ -98,7 +100,7 @@ describe("0001_queue.sql: apply", () => {
   it("applies on a clean Postgres without the Supabase roles", async () => {
     const c = await freshDb();
     const { rows } = await c.query("select version from public.weekpost_schema");
-    expect(rows).toEqual([{ version: 4 }]);
+    expect(rows).toEqual([{ version: 5 }]);
     const roles = await admin.query("select rolname from pg_roles where rolname = any($1)", [ROLES]);
     expect(roles.rows).toEqual([]);
   });
@@ -620,5 +622,64 @@ describe("weekpost_tokens", () => {
     await expect(ins("EN", "12345", "x".repeat(30))).rejects.toThrow(/check/);
     await expect(ins("fr", "abc", "x".repeat(30))).rejects.toThrow(/check/);
     await expect(ins("de", "123", "short")).rejects.toThrow(/check/);
+  });
+});
+
+describe("0005_metrics.sql", () => {
+  const metric = (c: Client, over: Record<string, unknown> = {}) => {
+    const r = { scope: "post", post_id: POST, account: "en", collected_on: "2026-10-30", metric: "reach", value: 29, ...over };
+    return c.query("insert into public.weekpost_metrics (scope, post_id, account, collected_on, metric, value) values ($1,$2,$3,$4,$5,$6)",
+      [r.scope, r.post_id, r.account, r.collected_on, r.metric, r.value]);
+  };
+
+  it("applies on top of 0004 and moves the schema to 5", async () => {
+    const c = await freshDb();
+    expect((await c.query("select version from public.weekpost_schema")).rows).toEqual([{ version: 5 }]);
+  });
+
+  it("has row level security and grants only to service_role", async () => {
+    for (const r of ROLES) await admin.query(`create role ${r} nologin`).catch(() => {});
+    const c = await freshDb();
+    expect((await c.query("select relrowsecurity from pg_class where relname = 'weekpost_metrics'")).rows).toEqual([{ relrowsecurity: true }]);
+    const can = async (role: string, priv: string) => (await c.query("select has_table_privilege($1, 'public.weekpost_metrics', $2) as ok", [role, priv])).rows[0].ok;
+    expect(await can("service_role", "insert")).toBe(true);
+    expect(await can("service_role", "update")).toBe(true);
+    expect(await can("anon", "select")).toBe(false);
+    expect(await can("authenticated", "select")).toBe(false);
+  });
+
+  it("keys a number by scope, post, account, day and metric", async () => {
+    const c = await freshDb();
+    await metric(c);
+    await expect(metric(c)).rejects.toThrow(/duplicate key/);
+    await metric(c, { metric: "views" });
+    await metric(c, { collected_on: "2026-11-06" });
+    await metric(c, { scope: "account", post_id: "" });
+  });
+
+  it("refuses negative values, a post scope without a post, an account scope with one, and bad names", async () => {
+    const c = await freshDb();
+    await expect(metric(c, { value: -1 })).rejects.toThrow(/check/);
+    await expect(metric(c, { post_id: "" })).rejects.toThrow(/check/);
+    await expect(metric(c, { scope: "account" })).rejects.toThrow(/check/);
+    await expect(metric(c, { scope: "other" })).rejects.toThrow(/check/);
+    await expect(metric(c, { metric: "Reach; drop" })).rejects.toThrow(/check/);
+    await expect(metric(c, { account: "Bad Account" })).rejects.toThrow(/check/);
+  });
+
+  it("stores values past 32 bits", async () => {
+    const c = await freshDb();
+    await metric(c, { value: "5000000000" });
+    expect((await c.query("select value::text from public.weekpost_metrics")).rows).toEqual([{ value: "5000000000" }]);
+  });
+
+  it("upserts through PostgREST-style on conflict", async () => {
+    const c = await freshDb();
+    const up = (v: number) => c.query(
+      "insert into public.weekpost_metrics (scope, post_id, account, collected_on, metric, value) values ('post',$1,'en','2026-10-30','reach',$2) on conflict (scope, post_id, account, collected_on, metric) do update set value = excluded.value",
+      [POST, v]);
+    await up(1);
+    await up(2);
+    expect((await c.query("select value::int from public.weekpost_metrics")).rows).toEqual([{ value: 2 }]);
   });
 });

@@ -4,7 +4,7 @@
 // this file only calls them.
 //   RPC: POST /rest/v1/rpc/<fn>  https://supabase.com/docs/guides/api
 //   Keys: https://supabase.com/docs/guides/api/api-keys
-import type { Db, Fetch, Key, NewRow, QueueRow, SourceStamp, Status, Token } from "./types.ts";
+import type { Db, Fetch, Key, MetricRow, MetricsDb, NewRow, QueueRow, SourceStamp, Status, Token } from "./types.ts";
 
 /** Auth headers for a server key. `sb_secret_...` goes only in `apikey`; a legacy JWT goes in both. */
 export function authHeaders(key: string | undefined): Record<string, string> {
@@ -124,7 +124,7 @@ const contentColumns = (c: Pick<NewRow, "caption" | "publishAt" | "media" | "cov
   ...stampColumns(c),
 });
 
-export function supabaseDb(url: string, key: string, fetchFn: Fetch = fetch): Db {
+export function supabaseDb(url: string, key: string, fetchFn: Fetch = fetch): Db & MetricsDb {
   const base = baseUrl(url);
   authHeaders(key); // fail early, before any request
   const req = (path: string, init?: RequestInit, guard?: RequestGuard) => request(fetchFn, base, key, path, init, guard).then((r) => r.body);
@@ -194,6 +194,35 @@ export function supabaseDb(url: string, key: string, fetchFn: Fetch = fetch): Db
         `/rest/v1/${TABLE}?select=post_id,account&status=eq.publishing&claimed_at=lt.${encodeURIComponent(olderThanIso)}&limit=5`,
       )) as Raw[];
       return rows.map((r) => ({ postId: r.post_id as string, account: r.account as string }));
+    },
+
+    async publishedSince(sinceIso) {
+      const q = `select=*&status=eq.published&media_id=not.is.null&published_at=gte.${encodeURIComponent(sinceIso)}&order=published_at,post_id,account`;
+      return ((await req(`/rest/v1/${TABLE}?${q}`)) as Raw[]).map(toRow);
+    },
+    async metricsSince(day) {
+      const rows = (await req(`/rest/v1/weekpost_metrics?select=scope,post_id,account,collected_on,metric,value&collected_on=gte.${encodeURIComponent(day)}&order=collected_on,scope,post_id,account,metric`)) as Raw[];
+      return rows.map((r): MetricRow => ({
+        scope: r.scope as MetricRow["scope"], postId: r.post_id as string, account: r.account as string,
+        collectedOn: r.collected_on as string, metric: r.metric as string, value: Number(r.value),
+      }));
+    },
+    async upsertMetrics(rows) {
+      if (!rows.length) return;
+      const body = rows.map((r) => ({ scope: r.scope, post_id: r.postId, account: r.account, collected_on: r.collectedOn, metric: r.metric, value: r.value }));
+      await req("/rest/v1/weekpost_metrics?on_conflict=scope,post_id,account,collected_on,metric", {
+        method: "POST", headers: { prefer: "resolution=merge-duplicates,return=minimal" }, body: JSON.stringify(body),
+      });
+    },
+    async failed() {
+      return ((await req(`/rest/v1/${TABLE}?select=*&status=eq.failed&order=publish_at,post_id,account`)) as Raw[]).map(toRow);
+    },
+    async overdue(beforeIso) {
+      return ((await req(`/rest/v1/${TABLE}?select=*&status=eq.scheduled&publish_at=lt.${encodeURIComponent(beforeIso)}&order=publish_at,post_id,account`)) as Raw[]).map(toRow);
+    },
+    async manualDue(sinceIso, untilIso) {
+      const q = `select=*&status=eq.manual&publish_at=gte.${encodeURIComponent(sinceIso)}&publish_at=lt.${encodeURIComponent(untilIso)}&order=publish_at,post_id,account`;
+      return ((await req(`/rest/v1/${TABLE}?${q}`)) as Raw[]).map(toRow);
     },
 
     async rows(filter) {
