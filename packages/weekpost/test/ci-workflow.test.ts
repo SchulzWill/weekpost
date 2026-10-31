@@ -6,7 +6,7 @@ import { parse } from "yaml";
 
 const path = join(import.meta.dirname, "../../../.github/workflows/ci.yml");
 const raw = readFileSync(path, "utf8");
-type Job = { permissions?: unknown; steps: { uses?: string; run?: string }[] };
+type Job = { name?: string; needs?: unknown; if?: string; strategy?: { "fail-fast"?: boolean; matrix?: { node?: number[] } }; permissions?: unknown; steps: { uses?: string; run?: string }[] };
 const w = parse(raw) as { on: Record<string, unknown>; permissions?: unknown; concurrency?: { group?: string; "cancel-in-progress"?: boolean }; jobs: Record<string, Job> };
 
 describe("ci workflow", () => {
@@ -36,9 +36,25 @@ describe("ci workflow", () => {
     expect(w.concurrency).toEqual({ group: "ci-${{ github.ref }}", "cancel-in-progress": true });
   });
 
-  it("has the verify, test-db and actionlint jobs", () => {
-    expect(Object.keys(w.jobs).sort()).toEqual(["actionlint", "test-db", "verify"]);
-    expect(w.jobs.verify.steps.some((s) => s.run === "npm run verify")).toBe(true);
+  it("has the verify-node, verify, test-db and actionlint jobs", () => {
+    expect(Object.keys(w.jobs).sort()).toEqual(["actionlint", "test-db", "verify", "verify-node"]);
+    expect(w.jobs["verify-node"].steps.some((s) => s.run === "npm run verify")).toBe(true);
     expect(w.jobs["test-db"].steps.some((s) => s.run === "npm run test:db")).toBe(true);
+  });
+
+  it("runs verify on Node 22, 24 and 26 without cancelling siblings", () => {
+    const job = w.jobs["verify-node"];
+    expect(job.strategy?.matrix?.node).toEqual([22, 24, 26]);
+    expect(job.strategy?.["fail-fast"]).toBe(false);
+    expect(job.name).toBe("verify (node ${{ matrix.node }})");
+  });
+
+  it("keeps a single aggregate job named exactly verify (the required status check) that fails unless the whole matrix succeeded", () => {
+    const job = w.jobs.verify;
+    expect(job.name).toBe("verify");
+    expect(job.needs).toBe("verify-node");
+    expect(job.if).toBe("always()");
+    expect(job.steps.some((s) => s.run?.includes('test "$MATRIX_RESULT" = "success"'))).toBe(true);
+    expect(raw).toContain("MATRIX_RESULT: ${{ needs.verify-node.result }}");
   });
 });
