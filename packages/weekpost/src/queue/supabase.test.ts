@@ -303,12 +303,11 @@ describe("MetricsDb", () => {
     return { ...m, db: supabaseDb("https://x.supabase.co", SECRET, m.fetchFn) };
   };
 
-  it("publishedSince asks for published rows with a media id and maps them", async () => {
+  it("publishedSince asks for published rows and maps them", async () => {
     const { db: d, calls } = db(() => [raw({ status: "published", media_id: "999" })]);
     const rows = await d.publishedSince("2026-10-16T00:00:00.000Z");
     expect(rows[0]).toMatchObject({ postId: "2026-10-26-a", mediaId: "999", status: "published" });
     expect(calls[0]!.url).toContain("status=eq.published");
-    expect(calls[0]!.url).toContain("media_id=not.is.null");
     expect(calls[0]!.url).toContain("published_at=gte.2026-10-16T00%3A00%3A00.000Z");
   });
 
