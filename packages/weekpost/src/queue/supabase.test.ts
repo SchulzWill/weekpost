@@ -297,6 +297,53 @@ describe("OperatorDb", () => {
   });
 });
 
+describe("MetricsDb", () => {
+  const db = (handler: (u: string, i: RequestInit) => unknown) => {
+    const m = mock(handler);
+    return { ...m, db: supabaseDb("https://x.supabase.co", SECRET, m.fetchFn) };
+  };
+
+  it("publishedSince asks for published rows with a media id and maps them", async () => {
+    const { db: d, calls } = db(() => [raw({ status: "published", media_id: "999" })]);
+    const rows = await d.publishedSince("2026-10-16T00:00:00.000Z");
+    expect(rows[0]).toMatchObject({ postId: "2026-10-26-a", mediaId: "999", status: "published" });
+    expect(calls[0]!.url).toContain("status=eq.published");
+    expect(calls[0]!.url).toContain("media_id=not.is.null");
+    expect(calls[0]!.url).toContain("published_at=gte.2026-10-16T00%3A00%3A00.000Z");
+  });
+
+  it("failed, overdue and manualDue filter by status and time", async () => {
+    const { db: d, calls } = db(() => []);
+    await d.failed();
+    await d.overdue("2026-10-30T07:00:00.000Z");
+    await d.manualDue("2026-10-26T00:00:00.000Z", "2026-11-02T00:00:00.000Z");
+    expect(calls[0]!.url).toContain("status=eq.failed");
+    expect(calls[1]!.url).toContain("status=eq.scheduled");
+    expect(calls[1]!.url).toContain("publish_at=lt.2026-10-30T07%3A00%3A00.000Z");
+    expect(calls[2]!.url).toContain("status=eq.manual");
+    expect(calls[2]!.url).toContain("publish_at=gte.");
+    expect(calls[2]!.url).toContain("publish_at=lt.");
+  });
+
+  it("upsertMetrics merges on the full key and sends nothing for an empty list", async () => {
+    const { db: d, calls } = db(() => null);
+    await d.upsertMetrics([]);
+    expect(calls).toHaveLength(0);
+    await d.upsertMetrics([{ scope: "account", postId: "", account: "en", collectedOn: "2026-10-30", metric: "reach", value: 37 }]);
+    expect(calls[0]!.url).toContain("/rest/v1/weekpost_metrics?on_conflict=scope,post_id,account,collected_on,metric");
+    expect(headers(calls[0]!).prefer).toContain("resolution=merge-duplicates");
+    expect(body(calls[0]!)).toEqual([{ scope: "account", post_id: "", account: "en", collected_on: "2026-10-30", metric: "reach", value: 37 }]);
+  });
+
+  it("metricsSince maps rows and converts bigint strings to numbers", async () => {
+    const { db: d, calls } = db(() => [{ scope: "post", post_id: "2026-10-26-a", account: "en", collected_on: "2026-10-30", metric: "views", value: "122" }]);
+    expect(await d.metricsSince("2026-10-23")).toEqual([
+      { scope: "post", postId: "2026-10-26-a", account: "en", collectedOn: "2026-10-30", metric: "views", value: 122 },
+    ]);
+    expect(calls[0]!.url).toContain("collected_on=gte.2026-10-23");
+  });
+});
+
 describe("supabaseStorage", () => {
   const st = (handler: Parameters<typeof mock>[0]) => {
     const m = mock(handler);

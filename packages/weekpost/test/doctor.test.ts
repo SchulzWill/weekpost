@@ -41,7 +41,7 @@ function greenWorld(): World {
       "gh secret list --env weekpost --json name": { status: 0, stdout: BOTH },
     },
     http: {
-      "/rest/v1/weekpost_schema?select=version": [200, [{ version: 4 }]],
+      "/rest/v1/weekpost_schema?select=version": [200, [{ version: 5 }]],
       "/storage/v1/bucket/weekpost-media": [200, { public: false }],
       "https://openrouter.ai/api/v1/key": [200, { data: { limit: 10 } }],
       "/me?fields=user_id%2Cusername": [200, { user_id: "1789", username: "myapp" }],
