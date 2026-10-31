@@ -6,7 +6,7 @@
 //   https://developers.facebook.com/docs/instagram-platform/reference/instagram-media/insights
 //   https://developers.facebook.com/docs/instagram-platform/api-reference/instagram-user/insights
 import { GraphError, type InstagramGraph } from "../publisher/instagram.ts";
-import type { MetricRow, MetricsDb, PostType, Token } from "../queue/types.ts";
+import type { MetricRow, MetricsDb, PostType, QueueRow, Token } from "../queue/types.ts";
 
 /** Reels. `ig_reels_avg_watch_time` is in milliseconds. */
 export const REEL_METRICS = ["reach", "views", "saved", "shares", "total_interactions", "likes", "comments", "ig_reels_avg_watch_time", "ig_reels_video_view_total_time"];
@@ -46,8 +46,10 @@ export interface CollectIssue {
 export interface Collected {
   rows: MetricRow[];
   issues: CollectIssue[];
-  /** Accounts the run reached, for the report. */
+  /** Accounts the run looked at, for the report. */
   accounts: string[];
+  /** The published posts of the window (Stories left out), for the type and the link of each row. */
+  posts: QueueRow[];
 }
 
 export function metricsFor(type: PostType): string[] | null {
@@ -128,6 +130,6 @@ export async function collectMetrics(deps: CollectDeps): Promise<Collected> {
       }
     }
   }
-  return { rows, issues, accounts };
+  return { rows, issues, accounts, posts };
 }
 
