@@ -47,6 +47,33 @@ npx weekpost metrics                     # read Instagram Insights and print the
 - The `weekpost-metrics` Action runs `metrics --write --issue` every week, so you do not need to. You can still run it by hand from a terminal (your agent cannot: Claude Code blocks it and Codex asks first). To trigger the Action now: `gh workflow run weekpost-metrics`.
 - Missing data never fails the run: it becomes an Attention line. Reading Insights needs the `instagram_business_manage_insights` permission on the token.
 
+#### Extra numbers from your own code
+
+`metrics.extra` in `weekpost.config.ts` is off by default. Set it to an async function that returns up to 10 `{ label, value }` rows, and they appear under "Extra numbers" in the report:
+
+```ts
+export default defineConfig({
+  // ...
+  metrics: {
+    extra: async ({ from, to, env, signal }) => {
+      // from, to: ISO 8601 UTC timestamps, the 7 days before the run (use from.slice(0, 10) for a date)
+      // accounts: the account keys; env: see below; signal: aborted after 30 s
+      const url = `https://example.com/api/signups?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`;
+      const res = await fetch(url, { headers: { authorization: `Bearer ${env.SIGNUPS_TOKEN}` }, signal });
+      if (!res.ok) throw new Error(`signups ${res.status}`);
+      const { count } = (await res.json()) as { count: number };
+      return [{ label: "Sign-ups from Instagram", value: count }];
+    },
+  },
+});
+```
+
+- It is your code in your repository, trusted like the rest of the config, and runs in the same process with a 30 s limit (`signal` is aborted when it expires).
+- `from`, `to`: ISO 8601 UTC timestamps such as `2026-10-25T08:00:00.000Z`, a rolling 7 days ending at the run (not the ISO week of the issue title). Use `from.slice(0, 10)` for a date.
+- `env` is parsed from `WEEKPOST_METRICS_EXTRA_ENV` (dotenv: one `KEY=value` per line, `#` comments, no `export`). At a terminal: `WEEKPOST_METRICS_EXTRA_ENV=$'SIGNUPS_TOKEN=abc' npx weekpost metrics`. In CI: a secret with that name in the GitHub environment `weekpost`. Nothing else from the environment is passed.
+- Labels are up to 60 characters and values (text or a finite number) up to 120. A row that breaks a limit or has the wrong type is dropped, and rows after the tenth are cut; each becomes one Attention line.
+- An exception, a rejection, a timeout or a result that is not an array becomes one Attention line. The rest of the report and the exit code are unaffected. The text is cleaned like the rest of the report. The error message is not copied into the report (it may hold data); log with `console.error`, which prints to the terminal or the Action log.
+
 `token` needs a terminal (it refuses to run from an agent shell). Copy the long-lived token from the Meta panel and run `npx weekpost token en`: it reads the clipboard (or a hidden prompt with `--prompt`), confirms on the Graph API that the token belongs to the account's handle and may publish, saves it in `weekpost_tokens` (59 days) and clears the clipboard. It never prints the token.
 
 `first-post` checks that your Worker really publishes. After `token`, run `npx weekpost first-post en --caption="Hello"` in a terminal (`--yes` skips the confirmation but never the terminal): it confirms the account handle, renders a plain card with your brand name (no paid API), queues it for about a minute ahead and watches the queue for up to 15 minutes (`--timeout=<minutes>`; the Worker's cron runs every 5 minutes), then prints the permalink. **The post is public on the real account**, so the caption is yours and required (without `--caption` it asks). If it fails, it translates the Worker's error and points to the step in [docs/setup.md](setup.md) to fix. Repeating the command the same day never queues a second post: it finds the existing row and keeps watching it. Delete the post on Instagram when you are done; weekpost does not delete media.
