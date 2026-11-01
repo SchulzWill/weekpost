@@ -19,6 +19,7 @@ import { runFirstPost } from "./firstPost.ts";
 import { runSetup } from "./setup.ts";
 import { runDoctor } from "./doctor.ts";
 import { runMetrics } from "./metrics.ts";
+import { runUpgrade } from "./upgrade.ts";
 import { readFileSync } from "node:fs";
 
 // The version of the installed package, read from its package.json.
@@ -46,6 +47,7 @@ commands:
   token <account>       save the Instagram token of an account (--prompt to type it instead of reading the clipboard; needs a terminal)
   sources pull <YYYY-Www>  write content/<week>/sources.json from the configured sources (the week before; --limit=20, --root=content, --project=<dir>)
   setup --plan|--apply  list the setup steps and what is done (--plan, --json), or run them at a terminal after asking (--apply, --only=<step-id>)
+  upgrade --plan        say what moving to the installed version would change, without writing anything (--json)
   doctor                check, without writing anything, that the setup works and say what to run for each failure (--json)
   metrics               read Instagram Insights and print the weekly report (--write to store it, --issue to post it as an issue, --json)
   first-post <account>  publish one public test post through your own Worker and wait for the permalink (--caption=<text>, --yes, --timeout=15 minutes)
@@ -94,6 +96,8 @@ export async function main(argv: string[]): Promise<number> {
       return runFirstPost(rest);
     case "setup":
       return runSetup(rest);
+    case "upgrade":
+      return runUpgrade(rest);
     case "doctor":
       return runDoctor(rest);
     case "agent-env":
