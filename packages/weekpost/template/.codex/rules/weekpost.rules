@@ -3,7 +3,7 @@
 # These are prefix rules: they match the command words as written, so other ways to run the same program
 # (a script, `sh -c '...'`, a variable) can slip through. They reduce accidents; they are not a security boundary.
 # `weekpost setup --only=x --apply` is caught by the "prompt" rule for `setup`; `--yes` by the ones for cancel, restore,
-# reschedule and resolve. every `weekpost metrics` asks first, because these rules match only the command prefix and cannot tell `--write` and `--issue` from a read-only run.
+# reschedule and resolve. Every `weekpost metrics` asks first: prefix rules cannot tell `--write` or `--issue` from a read-only run.
 
 prefix_rule(
     pattern = ["npx", "weekpost", "setup", "--apply"],

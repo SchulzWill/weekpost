@@ -119,7 +119,7 @@ describe("weekpost token", () => {
     const t = setup({ insightsStatus: 400 });
     expect(await runToken(["a"], t.out, "/x", t.deps)).toBe(0);
     expect(t.saved).toHaveLength(1);
-    expect(t.lines).toContain("warning: Token of `a` cannot read Insights (`weekpost metrics` needs `instagram_business_manage_insights`). In the Meta panel, generate a new token with it added, then run `npx weekpost token a`. Posts still publish.");
+    expect(t.lines).toContain("warning: the token for `a` cannot read Insights, so `weekpost metrics` will have no numbers (posts still publish). Generate it again in Meta's \"API setup with Instagram login\" with all three permissions (setup step 4, item 5), then run `npx weekpost token a`.");
     expectNoSecret(t.lines);
   });
 

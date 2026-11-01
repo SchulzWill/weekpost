@@ -200,7 +200,8 @@ describe("weekpost doctor", () => {
     const r = await greenDoctor((w) => (w.http["/1789/insights"] = [400, { error: { message: "(#10) Application does not have permission for this action", code: 10 } }]));
     const c = find(r.checks, "token.en.insights");
     expect(c.level).toBe("warn");
-    expect(c.detail).toBe("Token of `en` cannot read Insights (`weekpost metrics` needs `instagram_business_manage_insights`). In the Meta panel, generate a new token with it added, then run `npx weekpost token en`. Posts still publish.");
+    expect(c.detail).toBe("the token cannot read Insights; `weekpost metrics` needs `instagram_business_manage_insights` (posts still publish)");
+    expect(c.fix).toBe("generate the token again with all three permissions (setup step 4, item 5), then: npx weekpost token en");
     expect(find(r.checks, "token.en").level).toBe("ok");
     expect(r.code).toBe(0);
   });

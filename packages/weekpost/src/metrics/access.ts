@@ -19,4 +19,4 @@ export async function insightsAccess(graph: Pick<InstagramGraph, "accountInsight
 
 /** The warning for a token that cannot read Insights. Publishing works without the permission, so it is never an error. */
 export const noInsightsMessage = (account: string) =>
-  `Token of \`${account}\` cannot read Insights (\`weekpost metrics\` needs \`instagram_business_manage_insights\`). In the Meta panel, generate a new token with it added, then run \`npx weekpost token ${account}\`. Posts still publish.`;
+  `the token for \`${account}\` cannot read Insights, so \`weekpost metrics\` will have no numbers (posts still publish). Generate it again in Meta's "API setup with Instagram login" with all three permissions (setup step 4, item 5), then run \`npx weekpost token ${account}\`.`;

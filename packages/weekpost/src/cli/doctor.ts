@@ -5,7 +5,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { ConfigError } from "../config/parse.ts";
-import { insightsAccess, noInsightsMessage } from "../metrics/access.ts";
+import { insightsAccess } from "../metrics/access.ts";
 import { GRAPH_API_VERSION, GraphError, InstagramGraph, redact } from "../publisher/instagram.ts";
 import { supabaseDb } from "../queue/supabase.ts";
 import type { PublisherDb } from "../queue/types.ts";
@@ -132,7 +132,7 @@ async function tokenChecks(ctx: SetupContext, deps: DoctorDeps, now: Date): Prom
     }
     out.push({ id, level: "ok", detail: `@${a.handle}: token works, can publish, ${days} days left` });
     // A warning, never a failure: publishing works without the Insights permission.
-    if ((await insightsAccess(graph, me.userId, secret, now)) === "missing") out.push({ id: `${id}.insights`, level: "warn", detail: noInsightsMessage(a.id), fix });
+    if ((await insightsAccess(graph, me.userId, secret, now)) === "missing") out.push({ id: `${id}.insights`, level: "warn", detail: "the token cannot read Insights; `weekpost metrics` needs `instagram_business_manage_insights` (posts still publish)", fix: `generate the token again with all three permissions (setup step 4, item 5), then: ${fix}` });
   }
   return out;
 }
