@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { runDoctor, unpinnedActions, type Check, type DoctorDeps } from "../src/cli/doctor.ts";
+import { metricsWorkflowCheck, runDoctor, unpinnedActions, type Check, type DoctorDeps } from "../src/cli/doctor.ts";
 import { main } from "../src/cli/main.ts";
 import { GRAPH_VERSIONS, graphVersionStatus } from "../src/setup/graphVersions.ts";
 import type { RunResult } from "../src/setup/runner.ts";
@@ -123,6 +123,23 @@ describe("unpinnedActions", () => {
     mkdirSync(join(dir, ".github", "workflows"), { recursive: true });
     writeFileSync(join(dir, ".github", "workflows", "w.yml"), [`- uses: actions/checkout@v4`, `- uses: actions/setup-node@${SHA} # v7`, `- uses: ./local`, `- uses: docker://alpine:3`, `- uses: a/b@main`, `- uses: a/c`].join("\n"));
     expect(unpinnedActions(dir).unpinned).toEqual(["w.yml: actions/checkout@v4", "w.yml: a/b@main", "w.yml: a/c"]);
+  });
+});
+
+describe("metricsWorkflowCheck", () => {
+  const project = (files: string[]) => {
+    const dir = mkdtempSync(join(tmpdir(), "wp-mwf-"));
+    mkdirSync(join(dir, ".github", "workflows"), { recursive: true });
+    for (const f of files) writeFileSync(join(dir, ".github", "workflows", f), "name: x\n");
+    return dir;
+  };
+  it("warns when the other weekpost workflows exist but the metrics one does not", () => {
+    expect(metricsWorkflowCheck(project(["weekpost-check.yml", "weekpost-enqueue.yml"]))).toMatchObject({ id: "github.metrics-workflow", level: "warn", fix: expect.stringContaining("gh label create metrics") });
+  });
+  it("is silent when it is there, or when the project has no weekpost workflows", () => {
+    expect(metricsWorkflowCheck(project(["weekpost-check.yml", "weekpost-metrics.yml"]))).toBeUndefined();
+    expect(metricsWorkflowCheck(project(["ci.yml"]))).toBeUndefined();
+    expect(metricsWorkflowCheck(project([]))).toBeUndefined();
   });
 });
 

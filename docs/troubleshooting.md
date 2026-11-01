@@ -17,7 +17,9 @@ When `doctor`, `first-post` or `metrics` reports a problem. Back to the [README]
 | `supabase.bucket` fails | bucket missing | `npx weekpost setup --apply --only=storage.bucket` |
 | `worker.deployed` fails | not deployed, or not logged in to Cloudflare | `npx weekpost setup --apply --only=worker.deploy` |
 | `secrets.worker`, `secrets.actions`, `secrets.environment` or `secrets.local` fail | a secret was not set | `npx weekpost setup --apply --only=<that check's step>`: `worker.secrets`, `github.secrets`, `github.environment`, `local.secrets` |
-| `github.label` fails | label missing (or `origin` is not a GitHub repository) | push to GitHub, then `npx weekpost setup --apply --only=github.label` |
+| `github.label` fails | a label (`media-ok` or `metrics`) is missing (or `origin` is not a GitHub repository) | push to GitHub, then `npx weekpost setup --apply --only=github.label` (safe to re-run; or: `gh label create metrics`) |
+| `github.metrics-workflow` warns | the project predates `weekpost-metrics` | copy `.github/workflows/weekpost-metrics.yml` from the template, see [operate](operate.md#what-the-workflows-do) |
+| `weekpost-metrics` run fails | environment `weekpost` lacks the Supabase secrets, or the run was not on `main` | check Settings > Environments, then `gh workflow run weekpost-metrics --ref main` |
 | `github.workflows`: not pinned to a commit SHA | a workflow uses a tag | replace each tag with the full commit SHA of that release |
 | `token.<account>`: no token saved | step 6 not done | `npx weekpost token <account>` |
 | `token.<account>`: Instagram did not accept the token | expired or revoked | generate a new token in the Meta panel, then `npx weekpost token <account>` |

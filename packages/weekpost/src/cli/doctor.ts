@@ -2,7 +2,7 @@
 // Checks, item by item and without writing anything, that everything `setup` and `token` put in place is there and
 // working. Every line is ok, warn or fail; a failing line says what to run. Exits 0 when nothing fails (warnings are
 // things to look at, not blockers). No secret is ever printed: not a key, not a token, not a command's output.
-import { readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { ConfigError } from "../config/parse.ts";
 import { insightsAccess } from "../metrics/access.ts";
@@ -167,6 +167,15 @@ function workflowCheck(ctx: SetupContext): Check {
   return { id, level: "ok", detail: "every action is pinned to a commit SHA" };
 }
 
+/** A project set up before the metrics workflow existed has the other workflows but not this one. */
+export function metricsWorkflowCheck(projectRoot: string): Check | undefined {
+  const id = "github.metrics-workflow";
+  const dir = join(projectRoot, ".github", "workflows");
+  const has = (n: string) => existsSync(join(dir, n));
+  if (has("weekpost-metrics.yml") || !["weekpost-check.yml", "weekpost-preview.yml", "weekpost-enqueue.yml"].some(has)) return undefined;
+  return { id, level: "warn", detail: ".github/workflows/weekpost-metrics.yml is missing (the weekly metrics issue will not run)", fix: "copy it from the weekpost template (see docs/operate.md), then: gh label create metrics" };
+}
+
 /** Runs every check. Read-only. */
 export async function runChecks(ctx: SetupContext, deps: DoctorDeps = {}): Promise<Check[]> {
   const now = (deps.now ?? (() => new Date()))();
@@ -184,6 +193,8 @@ export async function runChecks(ctx: SetupContext, deps: DoctorDeps = {}): Promi
   checks.push(await fromProbe(ctx, "local.secrets", "secrets.local"));
   checks.push(await fromProbe(ctx, "github.label", "github.label"));
   checks.push(workflowCheck(ctx));
+  const metricsWf = metricsWorkflowCheck(ctx.projectRoot);
+  if (metricsWf) checks.push(metricsWf);
   checks.push(...(await tokenChecks(ctx, deps, now)));
   const g = graphVersionStatus(GRAPH_API_VERSION, now);
   checks.push({ id: "graph.version", level: g.level, detail: g.detail, ...(g.level === "ok" ? {} : { fix: "set graphVersion in the run options, or update weekpost" }) });

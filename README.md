@@ -68,7 +68,7 @@ flowchart LR
 3. **Preview:** when the copy looks right, add the `media-ok` label to the pull request. That is your go-ahead to spend on media. weekpost generates every image, voice-over, carousel and Reel, and links a preview with the week's cost.
 4. **Approve:** merge. The exact media from the preview goes to the queue, and a comment on the pull request says what was scheduled, skipped or canceled. If a run fails halfway, running it again is safe. Details in [docs/operate.md](docs/operate.md).
 5. **Publish:** your worker publishes each post at its scheduled time, without double-posting, and retries on failure.
-6. **Learn (partly built):** `npx weekpost metrics` prints the week's Instagram numbers. The `weekpost-metrics` Action publishes the weekly issue; the agent reading it is next.
+6. **Learn (partly built):** `npx weekpost metrics` prints the week's Instagram numbers. The `weekpost-metrics` Action publishes the report as a GitHub issue every Monday; the agent reading it is next.
 
 ## What exists and what does not
 
