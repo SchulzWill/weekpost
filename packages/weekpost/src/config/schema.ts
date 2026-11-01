@@ -97,6 +97,15 @@ const accounts = z.record(z.string(), account).superRefine((all, ctx) => {
 
 const PILLARS = "list 1 to 20 pillars";
 
+// metrics.extra: a command (program, then its arguments; no shell) that prints a JSON array of { label, value } for the weekly report.
+const metrics = z.strictObject({
+  extra: z
+    .strictObject({
+      command: z.array(z.string().min(1, "command part is empty"), { error: 'use an array: ["node", "scripts/extra-metrics.mjs"]' }).min(1, "command is empty"),
+    })
+    .optional(),
+});
+
 export const configSchema = z.strictObject({
   brand,
   accounts,
@@ -113,6 +122,8 @@ export const configSchema = z.strictObject({
   ci: z.strictObject({ previewLabel: text("preview label").refine((v) => !/[,\n]/.test(v) && v.length <= 50, "use one label of up to 50 characters, without commas") }).default({ previewLabel: "media-ok" }),
   // sources: adapters that feed `weekpost sources pull` (see src/sources). Optional; without them the week starts from BRIEF.md alone.
   sources: z.array(z.custom<SourceAdapter>((s) => typeof s === "object" && s !== null && typeof (s as { name?: unknown }).name === "string" && typeof (s as { pull?: unknown }).pull === "function", "a source must be an object with a name and a pull() function")).optional(),
+  // Optional; `metrics.extra` is off unless set.
+  metrics: metrics.optional(),
   lint: z.strictObject({ plugins: z.array(z.custom<LintPlugin>((p) => typeof p === "object" && p !== null && typeof (p as { name?: unknown }).name === "string", "plugin must be an object with a name")) }).default({ plugins: [] }),
 });
 

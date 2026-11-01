@@ -48,6 +48,13 @@ describe("parseConfig: valid input", () => {
     expect(warnings).toEqual([]);
   });
 
+  it("leaves metrics.extra off by default and checks its command", () => {
+    expect(parseConfig(valid()).config.metrics).toBeUndefined();
+    expect(parseConfig({ ...valid(), metrics: { extra: { command: ["node", "x.mjs"] } } }).config.metrics?.extra?.command).toEqual(["node", "x.mjs"]);
+    expect(() => parseConfig({ ...valid(), metrics: { extra: { command: [] } } })).toThrow();
+    expect(() => parseConfig({ ...valid(), metrics: { extra: { command: "node x.mjs" } } })).toThrow();
+  });
+
   it("fills neutral defaults for reel, budget and lint", () => {
     const { reel, budget, lint, ...rest } = valid();
     const { config } = parseConfig(rest);

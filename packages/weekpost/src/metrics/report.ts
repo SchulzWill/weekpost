@@ -112,11 +112,11 @@ function postsSection(rows: MetricRow[], posts: QueueRow[]): string[] {
   ];
 }
 
-function extraSection(extra: ExtraLine[] | null): string[] {
+function extraSection(extra: ExtraLine[] | null, failed: boolean): string[] {
   return [
     "## Extra numbers",
     "",
-    ...(extra === null ? ["Not configured (`metrics.extra` in `weekpost.config.ts`)."] : extra.length ? extra.map((e) => `- ${clean(e.label, 60)}: ${clean(String(e.value), 120)}`) : ["The hook returned no rows."]),
+    ...(failed ? ["The hook failed; see Attention."] : extra === null ? ["Not configured (`metrics.extra` in `weekpost.config.ts`)."] : extra.length ? extra.map((e) => `- ${clean(e.label, 60)}: ${clean(String(e.value), 120)}`) : ["The hook returned no rows."]),
     "",
   ];
 }
@@ -168,7 +168,7 @@ export function attentionLines(i: ReportInput): string[] {
   for (const m of i.collected.issues.filter((x) => x.kind === "error")) {
     out.push(`- **Could not read Insights for ${where(m)}:** ${clean(m.detail)}.`);
   }
-  if (i.extraError) out.push(`- **The \`metrics.extra\` hook failed:** ${clean(i.extraError)}. Fix it in \`weekpost.config.ts\`; the rest of this report is unaffected.`);
+  if (i.extraError) out.push(`- **The \`metrics.extra\` hook failed:** ${clean(i.extraError)}. Check \`metrics.extra\` in \`weekpost.config.ts\`; the rest of this report is unaffected.`);
   return out;
 }
 
@@ -179,7 +179,7 @@ export function buildReport(i: ReportInput): string {
     "",
     ...accountSection(i.collected.rows, i.collected.accounts),
     ...postsSection(i.collected.rows, i.collected.posts),
-    ...extraSection(i.extra),
+    ...extraSection(i.extra, Boolean(i.extraError)),
     "## Attention",
     "",
     ...(attention.length ? attention : [`Nothing pending: no failed or stuck posts, the queue is running, tokens have more than ${TOKEN_WARN_DAYS} days left.`]),

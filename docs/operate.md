@@ -44,6 +44,25 @@ npx weekpost metrics                     # read Instagram Insights and print the
 - A scheduled Action for `--write` and `--issue` is not shipped yet; run them yourself. They are blocked for Claude Code, and Codex asks you.
 - Missing data never fails the run: it becomes an Attention line. Reading Insights needs the `instagram_business_manage_insights` permission on the token.
 
+#### Extra numbers from your own command
+
+`metrics.extra` in `weekpost.config.ts` is off by default. Set it to a command (program, then its arguments; weekpost runs it without a shell) that prints a JSON array of up to 10 `{ label, value }` rows, and they appear under "Extra numbers" in the report:
+
+```ts
+export default defineConfig({
+  // ...
+  metrics: { extra: { command: ["node", "scripts/extra-metrics.mjs"] } },
+});
+```
+
+```json
+[{ "label": "Sign-ups from Instagram", "value": 12 }]
+```
+
+- It runs in the project folder with a 30 s limit. The window is in `WEEKPOST_METRICS_FROM` and `WEEKPOST_METRICS_TO` (ISO dates) and the accounts in `WEEKPOST_METRICS_ACCOUNTS` (comma-separated).
+- It does not inherit your environment. Its variables come from the optional `WEEKPOST_METRICS_EXTRA_ENV` secret (dotenv text, `KEY=value` per line), plus `PATH`.
+- A timeout, a non-zero exit, output that is not that JSON or more than 10 rows becomes one Attention line; the rest of the report and the exit code are unaffected. Text from the command is cleaned like the rest of the report (labels are cut at 60 characters, values at 120).
+
 `token` needs a terminal (it refuses to run from an agent shell). Copy the long-lived token from the Meta panel and run `npx weekpost token en`: it reads the clipboard (or a hidden prompt with `--prompt`), confirms on the Graph API that the token belongs to the account's handle and may publish, saves it in `weekpost_tokens` (59 days) and clears the clipboard. It never prints the token.
 
 `first-post` checks that your Worker really publishes. After `token`, run `npx weekpost first-post en --caption="Hello"` in a terminal (`--yes` skips the confirmation but never the terminal): it confirms the account handle, renders a plain card with your brand name (no paid API), queues it for about a minute ahead and watches the queue for up to 15 minutes (`--timeout=<minutes>`; the Worker's cron runs every 5 minutes), then prints the permalink. **The post is public on the real account**, so the caption is yours and required (without `--caption` it asks). If it fails, it translates the Worker's error and points to the step in [docs/setup.md](setup.md) to fix. Repeating the command the same day never queues a second post: it finds the existing row and keeps watching it. Delete the post on Instagram when you are done; weekpost does not delete media.
