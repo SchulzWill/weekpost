@@ -1,0 +1,49 @@
+name: weekpost-metrics
+
+# Once a week: reads the Instagram Insights of every account, stores the numbers in weekpost_metrics and rewrites
+# the weekly report as one GitHub issue (label `metrics`). It can also be run by hand. Runs code from main only;
+# the database secrets exist only in the metrics step. Needs a token with `instagram_business_manage_insights`.
+on:
+  schedule:
+    - cron: '0 8 * * 1'
+  workflow_dispatch:
+
+# One run at a time, never cancelled midway.
+concurrency:
+  group: weekpost-metrics
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  metrics:
+    # Main only: a manual dispatch from another branch would run that branch's code with the database secrets.
+    # Also restrict the environment's deployment branches to main (defense in depth).
+    if: github.ref == 'refs/heads/main'
+    environment: weekpost
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      issues: write
+    env:
+      TZ: UTC
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - run: npm ci
+
+      - name: collect, store and report the metrics
+        env:
+          WEEKPOST_SUPABASE_URL: ${{ secrets.WEEKPOST_SUPABASE_URL }}
+          WEEKPOST_SUPABASE_KEY: ${{ secrets.WEEKPOST_SUPABASE_KEY }}
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: npx weekpost metrics --write --issue

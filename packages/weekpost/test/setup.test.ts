@@ -132,7 +132,9 @@ describe("probes", () => {
 
   it("github.label and github.secrets", async () => {
     const label = "gh label list --json name --limit 200";
-    expect((await probe(ctxOf({ runs: { [label]: { status: 0, stdout: '[{"name":"media-ok"}]' } } }).ctx, "github.label")).state).toBe("ok");
+    expect((await probe(ctxOf({ runs: { [label]: { status: 0, stdout: '[{"name":"media-ok"},{"name":"metrics"}]' } } }).ctx, "github.label")).state).toBe("ok");
+    // either label missing is a todo
+    expect((await probe(ctxOf({ runs: { [label]: { status: 0, stdout: '[{"name":"media-ok"}]' } } }).ctx, "github.label")).state).toBe("todo");
     expect((await probe(ctxOf({ runs: { [label]: { status: 0, stdout: '[{"name":"bug"}]' } } }).ctx, "github.label")).state).toBe("todo");
     expect((await probe(ctxOf().ctx, "github.label")).state).toBe("unknown");
     const sec = "gh secret list --json name";

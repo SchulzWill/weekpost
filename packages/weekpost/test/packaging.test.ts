@@ -16,6 +16,7 @@ describe("npm pack", () => {
       "template/.github/dependabot.yml",
       "template/.github/workflows/weekpost-check.yml",
       "template/.github/workflows/weekpost-enqueue.yml",
+      "template/.github/workflows/weekpost-metrics.yml",
       "template/.github/workflows/weekpost-preview.yml",
       "migrations/0001_queue.sql",
       "worker/index.ts",

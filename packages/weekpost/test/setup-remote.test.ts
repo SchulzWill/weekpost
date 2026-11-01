@@ -82,10 +82,12 @@ describe("worker", () => {
 });
 
 describe("github", () => {
-  it("creates the label named in the config", async () => {
+  it("creates the label named in the config and the label of the metrics issue", async () => {
     const h = harness();
     await act("github.label")(h.io, step);
+    expect(h.calls).toHaveLength(2);
     expect(argv(h.calls[0]!)).toBe("gh label create media-ok --description Generate the media preview for this pull request");
+    expect(argv(h.calls[1]!)).toBe("gh label create metrics --force --description Weekly Instagram metrics report");
   });
 
   it("sets the Actions secret from stdin", async () => {

@@ -37,7 +37,7 @@ This is the same setup as [Set it up](setup.md), done by hand. `npx weekpost set
 
    It has one cron (every 5 minutes) and no HTTP route. For a smoke test with a short-lived token, set `WEEKPOST_REFRESH_TOKENS = "false"` in `wrangler.toml`. The other variables are listed there.
 6. **GitHub Actions.** In the repository settings:
-   - Create the label `media-ok` (it must match `ci.previewLabel` in `weekpost.config.ts` and the label in `weekpost-preview.yml`).
+   - Create the label `media-ok` (it must match `ci.previewLabel` in `weekpost.config.ts` and the label in `weekpost-preview.yml`) and the label `metrics` (the weekly metrics issue).
    - Add the secret `OPENROUTER_API_KEY` (use a key with a spending limit). Only the preview uses it.
-   - Create an environment named `weekpost`, restrict its deployment branches to `main`, and add the secrets `WEEKPOST_SUPABASE_URL` and `WEEKPOST_SUPABASE_KEY` to it. Only the enqueue step uses them.
+   - Create an environment named `weekpost`, restrict its deployment branches to `main`, and add the secrets `WEEKPOST_SUPABASE_URL` and `WEEKPOST_SUPABASE_KEY` to it. Only the enqueue and metrics steps use them.
    - Optional: a hosted preview on Cloudflare Pages for reviewing from a phone. Set the variable `WEEKPOST_PREVIEW_PAGES=true` and the secrets `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`, and put Cloudflare Access in front of the project: the preview holds unpublished posts.

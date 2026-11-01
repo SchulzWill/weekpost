@@ -1,6 +1,7 @@
 // Read-only probes, one per step. A probe never writes, never prints a secret and never puts command output
 // into its detail line (output can carry account names or tokens): the detail says what was found, in our words.
 import { readLocalEnv } from "../cli/secrets.ts";
+import { ISSUE_LABEL } from "../metrics/report.ts";
 import { WRANGLER_PKG } from "./runner.ts";
 import { request, SupabaseError } from "../queue/supabase.ts";
 import { ACTIONS_SECRET, ENVIRONMENT, WORKER_SECRETS, stepsFor, type Probe, type SetupContext, type StepId } from "./steps.ts";
@@ -106,7 +107,8 @@ async function workerSecrets(ctx: SetupContext): Promise<Probe> {
 async function label(ctx: SetupContext): Promise<Probe> {
   const list = await names(ctx, ["gh", "label", "list", "--json", "name", "--limit", "200"]);
   if (!list) return unknown("could not list the labels (gh not logged in, or this is not a GitHub repository)");
-  return list.includes(ctx.previewLabel) ? ok(`label "${ctx.previewLabel}" exists`) : todo(`label "${ctx.previewLabel}" does not exist`);
+  const missing = [ctx.previewLabel, ISSUE_LABEL].filter((l) => !list.includes(l));
+  return missing.length ? todo(`label ${missing.map((l) => `"${l}"`).join(", ")} does not exist`) : ok(`labels "${ctx.previewLabel}" and "${ISSUE_LABEL}" exist`);
 }
 
 async function actionsSecrets(ctx: SetupContext): Promise<Probe> {

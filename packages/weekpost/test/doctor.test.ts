@@ -34,7 +34,7 @@ function greenWorld(): World {
       "npx --yes wrangler@4 whoami": { status: 0, stdout: "logged in" },
       "npx --yes wrangler@4 deployments list --json": { status: 0, stdout: '[{"id":"a"}]' },
       "npx --yes wrangler@4 secret list": { status: 0, stdout: BOTH },
-      "gh label list --json name --limit 200": { status: 0, stdout: '[{"name":"media-ok"}]' },
+      "gh label list --json name --limit 200": { status: 0, stdout: '[{"name":"media-ok"},{"name":"metrics"}]' },
       "gh secret list --json name": { status: 0, stdout: '[{"name":"OPENROUTER_API_KEY"}]' },
       "gh api repos/{owner}/{repo}/environments/weekpost": { status: 0, stdout: RESTRICTED },
       "gh api repos/{owner}/{repo}/environments/weekpost/deployment-branch-policies": { status: 0, stdout: JSON.stringify({ branch_policies: [{ id: 1, name: "main" }] }) },

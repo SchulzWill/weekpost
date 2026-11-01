@@ -1,6 +1,7 @@
 // The steps of `weekpost setup`: stable ids, what the probe found, and the exact commands `--apply` runs.
 // Nothing here writes anything. A command line shown to the user never carries a secret value: secrets travel on stdin.
 import type { Fetch } from "../queue/types.ts";
+import { ISSUE_LABEL } from "../metrics/report.ts";
 import type { Runner } from "./runner.ts";
 
 export type StepState = "ok" | "todo" | "needs-you" | "unknown";
@@ -74,7 +75,11 @@ export function stepsFor(ctx: Pick<SetupContext, "accounts" | "previewLabel" | "
     // Deploy first: `wrangler secret put` on a Worker that does not exist yet asks whether to create it.
     { id: "worker.deploy", title: "Worker deploy", commands: [wranglerLine("deploy")] },
     { id: "worker.secrets", title: "Worker secrets", commands: ["WEEKPOST_SUPABASE_URL", "WEEKPOST_SUPABASE_KEY"].map((n) => `${wranglerLine(`secret put ${n}`)}   (value on stdin)`) },
-    { id: "github.label", title: `GitHub label "${ctx.previewLabel}"`, commands: [`gh label create ${JSON.stringify(ctx.previewLabel)}`] },
+    {
+      id: "github.label",
+      title: `GitHub labels "${ctx.previewLabel}" and "${ISSUE_LABEL}"`,
+      commands: [`gh label create ${JSON.stringify(ctx.previewLabel)}`, `gh label create ${JSON.stringify(ISSUE_LABEL)} --force   (the weekly metrics issue)`],
+    },
     { id: "github.secrets", title: "GitHub Actions secret", commands: [`gh secret set ${ACTIONS_SECRET}   (value on stdin)`] },
     {
       id: "github.environment",

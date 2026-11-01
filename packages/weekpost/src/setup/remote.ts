@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { readLocalEnv, writeLocalEnv } from "../cli/secrets.ts";
 import { ApplyError, type Action, type Actions, type ApplyIO } from "./apply.ts";
 import { WRANGLER_PKG, type RunResult } from "./runner.ts";
+import { ISSUE_LABEL } from "../metrics/report.ts";
 import { ACTIONS_SECRET, ENVIRONMENT, WORKER_SECRETS } from "./steps.ts";
 
 const WRANGLER = ["--yes", WRANGLER_PKG];
@@ -48,6 +49,9 @@ const githubLabel: Action = async (io) => {
   const label = io.context().previewLabel;
   await must(io, "gh label create", "gh", ["label", "create", label, "--description", "Generate the media preview for this pull request"], { cwd: io.context().projectRoot });
   io.out.log(`  label "${label}" created`);
+  // --force: the label may already exist (it is only updated), and the weekly issue needs it.
+  await must(io, "gh label create", "gh", ["label", "create", ISSUE_LABEL, "--force", "--description", "Weekly Instagram metrics report"], { cwd: io.context().projectRoot });
+  io.out.log(`  label "${ISSUE_LABEL}" created`);
 };
 
 const githubSecrets: Action = async (io) => {
