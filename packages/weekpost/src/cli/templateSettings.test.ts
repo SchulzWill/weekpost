@@ -23,13 +23,13 @@ const denied = (command: string) => deny.some((rule) => matches(rule, command));
 describe("template .claude/settings.json deny list", () => {
   it("denies every way of spelling the commands that write outside the repository", () => {
     for (const prefix of ["npx weekpost", "npx -y weekpost", "npx --yes weekpost", "./node_modules/.bin/weekpost", "node node_modules/weekpost/bin/weekpost.js", "node ./node_modules/.bin/weekpost"]) {
-      for (const c of ["setup --apply", "setup --only=worker.deploy --apply", "token en", "first-post en --yes", "enqueue dir --weeks=w", "cancel p --yes", "restore p --yes", "reschedule p --yes", "resolve p --yes"]) {
+      for (const c of ["setup --apply", "setup --only=worker.deploy --apply", "token en", "first-post en --yes", "enqueue dir --weeks=w", "cancel p --yes", "restore p --yes", "reschedule p --yes", "resolve p --yes", "metrics --write", "metrics --issue", "metrics --json --write --issue"]) {
         expect(denied(`${prefix} ${c}`), `${prefix} ${c}`).toBe(true);
       }
     }
   });
   it("still lets the agent run the read and write-the-repo commands", () => {
-    for (const c of ["npx weekpost check", "npx weekpost generate", "npx weekpost sources", "npx weekpost status", "npx weekpost doctor", "npx weekpost agent-env", "npx weekpost setup --plan", "./node_modules/.bin/weekpost check"]) {
+    for (const c of ["npx weekpost check", "npx weekpost generate", "npx weekpost sources", "npx weekpost status", "npx weekpost doctor", "npx weekpost metrics", "npx weekpost metrics --json", "npx weekpost agent-env", "npx weekpost setup --plan", "./node_modules/.bin/weekpost check"]) {
       expect(denied(c), c).toBe(false);
     }
   });

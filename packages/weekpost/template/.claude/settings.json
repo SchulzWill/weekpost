@@ -9,6 +9,8 @@
       "Bash(*weekpost* restore *--yes*)",
       "Bash(*weekpost* reschedule *--yes*)",
       "Bash(*weekpost* resolve *--yes*)",
+      "Bash(*weekpost* metrics *--write*)",
+      "Bash(*weekpost* metrics *--issue*)",
       "Bash(script *)",
       "Bash(expect *)",
       "Bash(unbuffer *)",

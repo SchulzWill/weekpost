@@ -95,6 +95,7 @@ describe("Attention, one item at a time", () => {
   it("token without the Insights permission", () => {
     const l = attention({ collected: { rows: [], accounts: ["en"], posts: [], issues: [issue("no-permission")] } })[0]!;
     expect(l).toContain("instagram_business_manage_insights");
+    expect(l).toContain("generate a new token");
     expect(l).toContain("npx weekpost token en");
   });
   it("token rejected by Meta and account without a token", () => {

@@ -9,9 +9,12 @@ How a release is cut: see [Releasing](docs/releasing.md).
 ### You need to do
 
 - Run migration `0005_metrics.sql` (`npx weekpost setup --apply --only=db.migrate`). It only adds a table, so the previous Worker keeps running.
+- To use `weekpost metrics`, generate a NEW token in the Meta panel with the `instagram_business_manage_insights` permission added, then run `npx weekpost token <account>`. Tokens made before this release lack it. Publishing works without this step.
+- Existing projects do not get the new agent rules, because `init` writes them only into new projects. Copy them from the template: the two `metrics --write` and `metrics --issue` lines of `.claude/settings.json`, and the `metrics` rules of `.codex/rules/weekpost.rules`.
 
 ### Improvements
 
+- `weekpost metrics` reads Instagram Insights and prints a weekly report with an Attention list; `--write` stores the numbers, `--issue` keeps one issue per week, `--json` prints the data. The two writing flags are blocked for Claude Code in the template, and Codex asks you before running any `metrics` command. Reading Insights needs the `instagram_business_manage_insights` permission (see "You need to do").
 - `weekpost init` writes `weekpost.lock.json`: the weekpost version, the answers (no secrets) and a sha256 for each generated file. Commit it; a later upgrade uses it to tell the files you edited from the ones it can replace.
 - New `weekpost_metrics` table (migration 0005) and queue-adapter reads for Instagram Insights.
 - `weekpost --version` prints the installed version.

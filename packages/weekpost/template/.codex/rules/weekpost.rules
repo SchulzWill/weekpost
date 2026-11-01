@@ -3,7 +3,7 @@
 # These are prefix rules: they match the command words as written, so other ways to run the same program
 # (a script, `sh -c '...'`, a variable) can slip through. They reduce accidents; they are not a security boundary.
 # `weekpost setup --only=x --apply` is caught by the "prompt" rule for `setup`; `--yes` by the ones for cancel, restore,
-# reschedule and resolve.
+# reschedule and resolve. `weekpost metrics --write` and `--issue` are caught by the "prompt" rule for `metrics`.
 
 prefix_rule(
     pattern = ["npx", "weekpost", "setup", "--apply"],
@@ -273,6 +273,36 @@ prefix_rule(
     pattern = ["node", ["node_modules/weekpost/bin/weekpost.js", "./node_modules/.bin/weekpost"], "resolve"],
     decision = "prompt",
     justification = "weekpost resolve: may change infrastructure or the queue (with --apply or --yes); read the command and run it yourself",
+)
+
+prefix_rule(
+    pattern = ["npx", "weekpost", "metrics"],
+    decision = "prompt",
+    justification = "weekpost metrics: with --write or --issue it writes the database or a GitHub issue, which is for CI; read the command and run it yourself",
+)
+
+prefix_rule(
+    pattern = ["npx", ["-y", "--yes"], "weekpost", "metrics"],
+    decision = "prompt",
+    justification = "weekpost metrics: with --write or --issue it writes the database or a GitHub issue, which is for CI; read the command and run it yourself",
+)
+
+prefix_rule(
+    pattern = ["weekpost", "metrics"],
+    decision = "prompt",
+    justification = "weekpost metrics: with --write or --issue it writes the database or a GitHub issue, which is for CI; read the command and run it yourself",
+)
+
+prefix_rule(
+    pattern = ["./node_modules/.bin/weekpost", "metrics"],
+    decision = "prompt",
+    justification = "weekpost metrics: with --write or --issue it writes the database or a GitHub issue, which is for CI; read the command and run it yourself",
+)
+
+prefix_rule(
+    pattern = ["node", ["node_modules/weekpost/bin/weekpost.js", "./node_modules/.bin/weekpost"], "metrics"],
+    decision = "prompt",
+    justification = "weekpost metrics: with --write or --issue it writes the database or a GitHub issue, which is for CI; read the command and run it yourself",
 )
 
 prefix_rule(
