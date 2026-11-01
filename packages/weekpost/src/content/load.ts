@@ -7,6 +7,7 @@ import { lintPost } from "../lint/core.ts";
 import { checkRealImages } from "../media/realImage.ts";
 import type { Issue, Post } from "./post.ts";
 import { validateWeek, type Contract } from "./week.ts";
+import { localToUtc } from "../queue/plan.ts";
 
 export const WEEK_DIR = /^\d{4}-W\d{2}$/;
 
@@ -21,8 +22,27 @@ function checkMusic(post: Post, projectDir: string): Issue[] {
   return found ? [] : [{ level: "error", where: `${post.id} reel.music`, message: `no file named "${name}" in assets/music/ (add it there, or use "none")` }];
 }
 
+/** True when every post of the week has already gone out (its local time, in the zone of its account, is before `now`). */
+function weekIsPast(posts: Post[], config: WeekpostConfig, now: Date): boolean {
+  if (posts.length === 0) return false;
+  try {
+    return posts.every((p) => p.accounts.every((acc) => new Date(localToUtc(p.date, p.times[acc], config.accounts[acc].timeZone)).getTime() < now.getTime()));
+  } catch {
+    return false;
+  }
+}
+
+export type CheckOptions = {
+  /**
+   * "Past weeks" mode, used by `upgrade --plan`: with `now`, a lint error (text rules, music, real images) in a week
+   * whose posts have all gone out is reported as a warning, because a rule added later must not block an upgrade for
+   * good. Contract errors (YAML, `version`, schema, dates, links) stay errors. Each issue also carries its `week`.
+   */
+  now?: Date;
+};
+
 // `root` is the content directory; the project directory (assets/, config) is its parent.
-export function checkContent(root: string, config: WeekpostConfig, only?: string, contract?: Contract): { weeks: Week[]; issues: Issue[] } {
+export function checkContent(root: string, config: WeekpostConfig, only?: string, contract?: Contract, options: CheckOptions = {}): { weeks: Week[]; issues: Issue[] } {
   const weeks: Week[] = [];
   const issues: Issue[] = [];
   const firstSeen = new Map<string, string>();
@@ -32,6 +52,12 @@ export function checkContent(root: string, config: WeekpostConfig, only?: string
   for (const week of dirs) {
     const file = join(root, week, "posts.yaml");
     if (!existsSync(file)) continue;
+    const first0 = issues.length;
+    const lint: Issue[] = [];
+    const tag = () => {
+      if (!options.now) return;
+      for (const i of issues.slice(first0)) i.week = week;
+    };
     let raw: unknown;
     try {
       raw = parse(readFileSync(file, "utf8"));
@@ -40,6 +66,7 @@ export function checkContent(root: string, config: WeekpostConfig, only?: string
       // Most common mistake: text with a comma inside { en: ..., pt: ... } without quotes.
       const hint = /keys must be unique|Flow map/i.test(first) ? ' (hint: quote text that has a comma inside "{ }")' : "";
       issues.push({ level: "error", where: `${week}/posts.yaml`, message: `invalid YAML: ${first}${hint}` });
+      tag();
       continue;
     }
     const result = validateWeek(week, raw, config, contract);
@@ -48,8 +75,12 @@ export function checkContent(root: string, config: WeekpostConfig, only?: string
       const other = firstSeen.get(post.id);
       if (other && other !== week) issues.push({ level: "error", where: `${post.id} id`, message: `id already used in ${other}` });
       firstSeen.set(post.id, week);
-      issues.push(...lintPost(post, config), ...checkMusic(post, projectDir), ...checkRealImages(post, join(root, week)));
+      const found = [...lintPost(post, config), ...checkMusic(post, projectDir), ...checkRealImages(post, join(root, week))];
+      lint.push(...found);
+      issues.push(...found);
     }
+    if (options.now && weekIsPast(result.posts, config, options.now)) for (const i of lint) i.level = "warn";
+    tag();
     weeks.push({ week, dir: join(root, week), posts: result.posts, enqueueAccounts: result.enqueueAccounts });
   }
   return { weeks, issues };

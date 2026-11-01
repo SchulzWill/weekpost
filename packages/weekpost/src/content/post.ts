@@ -115,7 +115,7 @@ export type PostSchema = ReturnType<typeof buildPostSchema>;
 export type Post = z.infer<PostSchema>;
 export type Slide = Extract<Post, { type: "carousel" }>["slides"][number];
 
-export type Issue = { level: "error" | "warn"; where: string; message: string };
+export type Issue = { level: "error" | "warn"; where: string; message: string; /** Set by `checkContent` in "past weeks" mode. */ week?: string };
 
 // All text fields of the post, with the path used in messages.
 export function textFields(post: Post): { path: string; text: Text }[] {
