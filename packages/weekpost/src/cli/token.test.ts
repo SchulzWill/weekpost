@@ -10,7 +10,7 @@ const config = testConfig();
 
 type Upsert = { account: string; igUserId: string; accessToken: string; expiresAt: string };
 
-function setup(over: { me?: unknown; meStatus?: number; limitStatus?: number; clip?: string; typed?: string; upsertFails?: boolean } = {}) {
+function setup(over: { me?: unknown; meStatus?: number; limitStatus?: number; insightsStatus?: number; clip?: string; typed?: string; upsertFails?: boolean } = {}) {
   const lines: string[] = [];
   const out = { log: (l: string) => lines.push(l), error: (l: string) => lines.push(`ERR ${l}`) };
   const requests: { url: string; headers: Record<string, string> }[] = [];
@@ -26,6 +26,10 @@ function setup(over: { me?: unknown; meStatus?: number; limitStatus?: number; cl
     if (u.includes("content_publishing_limit")) {
       const status = over.limitStatus ?? 200;
       return new Response(JSON.stringify(status === 200 ? { data: [] } : { error: { message: "permission (#10) missing", code: 10 } }), { status });
+    }
+    if (u.includes("/insights")) {
+      const status = over.insightsStatus ?? 200;
+      return new Response(JSON.stringify(status === 200 ? { data: [{ name: "reach", total_value: { value: 3 } }] } : { error: { message: "(#10) Application does not have permission for this action", code: 10 } }), { status });
     }
     throw new Error(`unexpected request ${u}`);
   }) as unknown as typeof fetch;
@@ -70,13 +74,14 @@ describe("weekpost token", () => {
   it("sends the token in the Authorization header, never in the URL", async () => {
     const t = setup();
     await runToken(["a"], t.out, "/x", t.deps);
-    expect(t.requests.length).toBe(2);
+    expect(t.requests.length).toBe(3);
     for (const r of t.requests) {
       expect(r.url).not.toContain(SENTINEL);
       expect(r.headers.authorization).toBe(`Bearer ${SENTINEL}`);
     }
     expect(t.requests[0]!.url).toContain("/me?fields=user_id%2Cusername");
     expect(t.requests[1]!.url).toContain("/9000000001/content_publishing_limit");
+    expect(t.requests[2]!.url).toContain("/9000000001/insights");
   });
 
   it("refuses the wrong account, names both, saves nothing and keeps the clipboard", async () => {
@@ -108,6 +113,20 @@ describe("weekpost token", () => {
     expect(t.lines.join("\n")).toMatch(/instagram_business_content_publish/);
     expect(t.saved).toEqual([]);
     expectNoSecret(t.lines);
+  });
+
+  it("saves a token that cannot read Insights and warns", async () => {
+    const t = setup({ insightsStatus: 400 });
+    expect(await runToken(["a"], t.out, "/x", t.deps)).toBe(0);
+    expect(t.saved).toHaveLength(1);
+    expect(t.lines).toContain("warning: the token for `a` cannot read Insights, so `weekpost metrics` will have no numbers (posts still publish). Generate it again in Meta's \"API setup with Instagram login\" with all three permissions (setup step 4, item 5), then run `npx weekpost token a`.");
+    expectNoSecret(t.lines);
+  });
+
+  it("does not warn when the token can read Insights", async () => {
+    const t = setup();
+    expect(await runToken(["a"], t.out, "/x", t.deps)).toBe(0);
+    expect(t.lines.join("\n")).not.toContain("Insights");
   });
 
   it("refuses without a terminal, before reading anything", async () => {

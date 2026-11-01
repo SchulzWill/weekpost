@@ -77,7 +77,7 @@ The `fix` field of each failing check already holds the command. Use this table 
 | `secrets.local` | local secrets file missing | `npx weekpost setup --apply --only=local.secrets` |
 | `github.label` | label missing, or `origin` is not on GitHub | push to GitHub, then `npx weekpost setup --apply --only=github.label` |
 | `github.workflows` | an action is pinned to a tag, not a commit SHA | replace each tag with the full commit SHA |
-| `token.<account>` | no token, rejected, wrong handle, cannot publish, or expiring | new token with both permissions, then `npx weekpost token <account>` |
+| `token.<account>` | no token, rejected, wrong handle, cannot publish, or expiring | new token with all three permissions, then `npx weekpost token <account>` |
 | `graph.version` | Graph API version near its end | update weekpost |
 
 A `warn` is not a blocker: say what it means and go on.

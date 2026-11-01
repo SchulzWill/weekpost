@@ -147,7 +147,7 @@ describe("weekpost metrics", () => {
     const r = await run([], { db: fakeDb().db, fetch: failing });
     expect(r.code).toBe(0);
     expect(r.out).toContain("cannot read Insights");
-    expect(r.out).toContain("generate a new token");
+    expect(r.out).toContain("all three permissions");
   });
 
   it("asks the queue with the right thresholds: 30 min stuck, 60 min overdue, Monday-to-Monday Stories", async () => {

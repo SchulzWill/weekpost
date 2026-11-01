@@ -6,6 +6,7 @@ import { spawnSync } from "node:child_process";
 import { loadConfig } from "../config/load.ts";
 import { ConfigError } from "../config/parse.ts";
 import type { WeekpostConfig } from "../config/schema.ts";
+import { insightsAccess, noInsightsMessage } from "../metrics/access.ts";
 import { GraphError, InstagramGraph, redact } from "../publisher/instagram.ts";
 import { supabaseDb } from "../queue/supabase.ts";
 import type { OperatorDb } from "../queue/types.ts";
@@ -145,8 +146,10 @@ export async function runToken(args: string[], out: Out = console, cwd = process
     return 1;
   }
   out.log(`token ok: @${me.username} (${me.userId})`);
-
   const now = (deps.now ?? (() => new Date()))();
+  // A warning, not an error: publishing works without the Insights permission, so the token is still saved.
+  if ((await insightsAccess(graph, me.userId, token, now)) === "missing") out.log(`warning: ${noInsightsMessage(accountId)}`);
+
   const expiresAt = new Date(now.getTime() + TOKEN_DAYS * 86_400_000).toISOString();
   try {
     let db = deps.db;

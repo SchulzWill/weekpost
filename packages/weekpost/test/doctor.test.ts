@@ -47,6 +47,7 @@ function greenWorld(): World {
       "/me?fields=user_id%2Cusername": [200, { user_id: "1789", username: "myapp" }],
       "/me?fields=user_id,username": [200, { user_id: "1789", username: "myapp" }],
       "/1789/content_publishing_limit": [200, { data: [] }],
+      "/1789/insights": [200, { data: [{ name: "reach", total_value: { value: 3 } }] }],
     },
     tokens: [{ account: "en", igUserId: "1789", accessToken: IG_TOKEN, expiresAt: "2026-12-20T00:00:00Z", refreshedAt: "2026-11-01T00:00:00Z" }],
     uses: [`actions/checkout@${SHA} # v7`],
@@ -193,6 +194,23 @@ describe("weekpost doctor", () => {
       expect(r.code).toBe(1);
     }
     expect(find((await greenDoctor((w) => (w.tokens = [row({ expiresAt: t(8) })]))).checks, "token.en").level).toBe("ok");
+  });
+
+  it("warns, without failing, when the token cannot read Insights", async () => {
+    const r = await greenDoctor((w) => (w.http["/1789/insights"] = [400, { error: { message: "(#10) Application does not have permission for this action", code: 10 } }]));
+    const c = find(r.checks, "token.en.insights");
+    expect(c.level).toBe("warn");
+    expect(c.detail).toBe("the token cannot read Insights; `weekpost metrics` needs `instagram_business_manage_insights` (posts still publish)");
+    expect(c.fix).toBe("generate the token again with all three permissions (setup step 4, item 5), then: npx weekpost token en");
+    expect(find(r.checks, "token.en").level).toBe("ok");
+    expect(r.code).toBe(0);
+  });
+
+  it("does not warn when the token can read Insights or the check is inconclusive", async () => {
+    expect(find((await greenDoctor()).checks, "token.en.insights")).toBeUndefined();
+    const r = await greenDoctor((w) => (w.http["/1789/insights"] = [500, { error: { message: "boom", code: 2 } }]));
+    expect(r.checks.some((c) => c.id === "token.en.insights")).toBe(false);
+    expect(r.code).toBe(0);
   });
 
   it("OpenRouter: 401 fails, no credit limit warns, not set warns", async () => {
