@@ -40,7 +40,7 @@ function weekBounds(d: Date): [string, string] {
 }
 
 /** Runs the optional hook. Off (`extra: null`) without `metrics.extra`; any failure comes back as `extraError`, never as a throw. */
-async function extraNumbers(preset: MetricsDeps["config"], projectRoot: string, env: Record<string, string | undefined>, now: Date, accounts: string[]): Promise<Pick<ReportInput, "extra" | "extraError">> {
+async function extraNumbers(preset: MetricsDeps["config"], projectRoot: string, env: Record<string, string | undefined>, now: Date, accounts: string[]): Promise<Pick<ReportInput, "extra" | "extraError" | "extraWarnings">> {
   let config = preset;
   if (!config) {
     try {
@@ -50,10 +50,10 @@ async function extraNumbers(preset: MetricsDeps["config"], projectRoot: string, 
       return /not found/.test((e as Error).message) ? { extra: null } : { extra: null, extraError: "weekpost.config.ts could not be loaded, so the hook did not run (run `npx weekpost check`)" };
     }
   }
-  const command = config.metrics?.extra?.command;
-  if (!command) return { extra: null };
-  const r = await runExtra({ command, cwd: projectRoot, envText: env.WEEKPOST_METRICS_EXTRA_ENV, from: new Date(now.getTime() - 7 * DAY).toISOString(), to: now.toISOString(), accounts });
-  return "lines" in r ? { extra: r.lines } : { extra: [], extraError: r.error };
+  const hook = config.metrics?.extra;
+  if (!hook) return { extra: null };
+  const r = await runExtra({ hook, envText: env.WEEKPOST_METRICS_EXTRA_ENV, from: new Date(now.getTime() - 7 * DAY).toISOString(), to: now.toISOString(), accounts });
+  return "lines" in r ? { extra: r.lines, extraWarnings: r.warnings } : { extra: [], extraError: r.error };
 }
 
 export async function runMetrics(args: string[], out: Out = console, cwd = process.cwd(), deps: MetricsDeps = {}): Promise<number> {
@@ -74,7 +74,7 @@ export async function runMetrics(args: string[], out: Out = console, cwd = proce
     const db = deps.db ?? supabaseDb(env.WEEKPOST_SUPABASE_URL ?? "", env.WEEKPOST_SUPABASE_KEY ?? "", fetchFn);
     const collected = await collectMetrics({ db, graph: new InstagramGraph(fetchFn), now });
     const [weekStart, weekEnd] = weekBounds(now);
-    const { extra, extraError } = await extraNumbers(deps.config, projectPaths(args, cwd).projectRoot, env, now, collected.accounts);
+    const { extra, extraError, extraWarnings } = await extraNumbers(deps.config, projectPaths(args, cwd).projectRoot, env, now, collected.accounts);
     const input: ReportInput = {
       now,
       collected,
@@ -86,6 +86,7 @@ export async function runMetrics(args: string[], out: Out = console, cwd = proce
       graph: { version: GRAPH_API_VERSION, ...graphVersionStatus(GRAPH_API_VERSION, now) },
       extra,
       ...(extraError ? { extraError } : {}),
+      ...(extraWarnings?.length ? { extraWarnings } : {}),
     };
     const markdown = buildReport(input);
 

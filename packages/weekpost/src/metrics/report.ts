@@ -59,6 +59,8 @@ export interface ReportInput {
   extra: ExtraLine[] | null;
   /** The hook failed or returned something unusable. */
   extraError?: string;
+  /** Rows dropped or cut by the limits; one Attention line each. */
+  extraWarnings?: string[];
 }
 
 const num = (n: number | undefined) => (n === undefined ? "—" : String(n));
@@ -169,6 +171,7 @@ export function attentionLines(i: ReportInput): string[] {
     out.push(`- **Could not read Insights for ${where(m)}:** ${clean(m.detail)}.`);
   }
   if (i.extraError) out.push(`- **The \`metrics.extra\` hook failed:** ${clean(i.extraError)}. Check \`metrics.extra\` in \`weekpost.config.ts\`; the rest of this report is unaffected.`);
+  for (const w of i.extraWarnings ?? []) out.push(`- **The \`metrics.extra\` hook:** ${clean(w)}.`);
   return out;
 }
 

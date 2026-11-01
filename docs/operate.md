@@ -44,24 +44,28 @@ npx weekpost metrics                     # read Instagram Insights and print the
 - A scheduled Action for `--write` and `--issue` is not shipped yet; run them yourself. They are blocked for Claude Code, and Codex asks you.
 - Missing data never fails the run: it becomes an Attention line. Reading Insights needs the `instagram_business_manage_insights` permission on the token.
 
-#### Extra numbers from your own command
+#### Extra numbers from your own code
 
-`metrics.extra` in `weekpost.config.ts` is off by default. Set it to a command (program, then its arguments; weekpost runs it without a shell) that prints a JSON array of up to 10 `{ label, value }` rows, and they appear under "Extra numbers" in the report:
+`metrics.extra` in `weekpost.config.ts` is off by default. Set it to an async function that returns up to 10 `{ label, value }` rows, and they appear under "Extra numbers" in the report:
 
 ```ts
 export default defineConfig({
   // ...
-  metrics: { extra: { command: ["node", "scripts/extra-metrics.mjs"] } },
+  metrics: {
+    extra: async ({ from, to, accounts, env }) => {
+      // from, to: ISO dates of the 7-day window; accounts: the account keys; env: see below
+      const res = await fetch(`https://example.com/api/signups?from=${from}&to=${to}`, { headers: { authorization: `Bearer ${env.SIGNUPS_TOKEN}` } });
+      const { count } = (await res.json()) as { count: number };
+      return [{ label: "Sign-ups from Instagram", value: count }];
+    },
+  },
 });
 ```
 
-```json
-[{ "label": "Sign-ups from Instagram", "value": 12 }]
-```
-
-- It runs in the project folder with a 30 s limit. The window is in `WEEKPOST_METRICS_FROM` and `WEEKPOST_METRICS_TO` (ISO dates) and the accounts in `WEEKPOST_METRICS_ACCOUNTS` (comma-separated).
-- It does not inherit your environment. Its variables come from the optional `WEEKPOST_METRICS_EXTRA_ENV` secret (dotenv text, `KEY=value` per line), plus `PATH`.
-- A timeout, a non-zero exit, output that is not that JSON or more than 10 rows becomes one Attention line; the rest of the report and the exit code are unaffected. Text from the command is cleaned like the rest of the report (labels are cut at 60 characters, values at 120).
+- It is your code in your repository, trusted like the rest of the config, and runs in the same process with a 30 s limit (`signal` is aborted when it expires).
+- `env` holds only what you put in the optional `WEEKPOST_METRICS_EXTRA_ENV` secret (dotenv text, `KEY=value` per line), parsed for you. The rest of the environment is not passed.
+- Labels are up to 60 characters and values (text or a finite number) up to 120. A row that breaks a limit or has the wrong type is dropped, and rows after the tenth are cut; each becomes one Attention line.
+- An exception, a rejection, a timeout or a result that is not an array becomes one Attention line. The rest of the report and the exit code are unaffected. The text is cleaned like the rest of the report.
 
 `token` needs a terminal (it refuses to run from an agent shell). Copy the long-lived token from the Meta panel and run `npx weekpost token en`: it reads the clipboard (or a hidden prompt with `--prompt`), confirms on the Graph API that the token belongs to the account's handle and may publish, saves it in `weekpost_tokens` (59 days) and clears the clipboard. It never prints the token.
 

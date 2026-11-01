@@ -48,11 +48,12 @@ describe("parseConfig: valid input", () => {
     expect(warnings).toEqual([]);
   });
 
-  it("leaves metrics.extra off by default and checks its command", () => {
+  it("leaves metrics.extra off by default and accepts only a function", () => {
+    const hook = async () => [{ label: "Sign-ups", value: 1 }];
     expect(parseConfig(valid()).config.metrics).toBeUndefined();
-    expect(parseConfig({ ...valid(), metrics: { extra: { command: ["node", "x.mjs"] } } }).config.metrics?.extra?.command).toEqual(["node", "x.mjs"]);
-    expect(() => parseConfig({ ...valid(), metrics: { extra: { command: [] } } })).toThrow();
-    expect(() => parseConfig({ ...valid(), metrics: { extra: { command: "node x.mjs" } } })).toThrow();
+    expect(parseConfig({ ...valid(), metrics: { extra: hook } }).config.metrics?.extra).toBe(hook);
+    expect(() => parseConfig({ ...valid(), metrics: { extra: { command: ["node", "x.mjs"] } } })).toThrow();
+    expect(() => parseConfig({ ...valid(), metrics: { extra: "node x.mjs" } })).toThrow();
   });
 
   it("fills neutral defaults for reel, budget and lint", () => {

@@ -1,4 +1,5 @@
 // Schema of weekpost.config.ts. Every rule has a message that names the field and the fix.
+import type { ExtraHook } from "../metrics/extra.ts";
 import { z } from "zod";
 
 const HEX = /^#[0-9a-fA-F]{6}$/;
@@ -97,13 +98,9 @@ const accounts = z.record(z.string(), account).superRefine((all, ctx) => {
 
 const PILLARS = "list 1 to 20 pillars";
 
-// metrics.extra: a command (program, then its arguments; no shell) that prints a JSON array of { label, value } for the weekly report.
+// metrics.extra: an async function that returns [{ label, value }] for the weekly report (see src/metrics/extra.ts).
 const metrics = z.strictObject({
-  extra: z
-    .strictObject({
-      command: z.array(z.string().min(1, "command part is empty"), { error: 'use an array: ["node", "scripts/extra-metrics.mjs"]' }).min(1, "command is empty"),
-    })
-    .optional(),
+  extra: z.custom<ExtraHook>((f) => typeof f === "function", { error: "metrics.extra must be a function: async ({ from, to, accounts, env }) => [{ label, value }]" }).optional(),
 });
 
 export const configSchema = z.strictObject({

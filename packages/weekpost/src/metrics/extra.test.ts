@@ -1,56 +1,58 @@
 import { describe, expect, it } from "vitest";
-import { runExtra, parseDotenv, type ExtraResult } from "./extra.ts";
+import { runExtra, parseDotenv, type ExtraHook, type ExtraResult } from "./extra.ts";
 import { runMetrics } from "../cli/metrics.ts";
 import { buildReport } from "./report.ts";
 
-const node = (code: string) => [process.execPath, "-e", code];
-const run = (command: string[], over: Partial<Parameters<typeof runExtra>[0]> = {}): Promise<ExtraResult> =>
-  runExtra({ command, cwd: process.cwd(), from: "2026-10-26T00:00:00Z", to: "2026-11-02T00:00:00Z", accounts: ["en", "pt"], ...over });
+const run = (hook: ExtraHook, over: Partial<Parameters<typeof runExtra>[0]> = {}): Promise<ExtraResult> =>
+  runExtra({ hook, from: "2026-10-26T00:00:00Z", to: "2026-11-02T00:00:00Z", accounts: ["en", "pt"], ...over });
 
 describe("runExtra", () => {
-  it("returns the rows of a command that prints valid JSON", async () => {
-    const r = await run(node('console.log(JSON.stringify([{label:"Sign-ups",value:12},{label:"Plan",value:"pro"}]))'));
-    expect(r).toEqual({ lines: [{ label: "Sign-ups", value: 12 }, { label: "Plan", value: "pro" }] });
+  it("returns the rows of a hook, with the window, the accounts and the parsed env", async () => {
+    const r = await run(async ({ from, to, accounts, env }) => [{ label: "Sign-ups", value: 12 }, { label: "Ctx", value: [from, to, accounts.join(","), env.API_KEY].join("|") }], { envText: '# comment\nAPI_KEY="abc"\n' });
+    expect(r).toEqual({ lines: [{ label: "Sign-ups", value: 12 }, { label: "Ctx", value: "2026-10-26T00:00:00Z|2026-11-02T00:00:00Z|en,pt|abc" }], warnings: [] });
   });
 
-  it("gives the command the window, the accounts and only WEEKPOST_METRICS_EXTRA_ENV as secrets", async () => {
-    process.env.WEEKPOST_DB_KEY = "must-stay-out";
-    const r = await run(
-      node('const e=process.env;console.log(JSON.stringify([{label:"v",value:[e.WEEKPOST_METRICS_FROM,e.WEEKPOST_METRICS_ACCOUNTS,e.API_KEY,e.WEEKPOST_DB_KEY].join("|")}]))'),
-      { envText: '# comment\nAPI_KEY="abc"\n' },
-    );
-    delete process.env.WEEKPOST_DB_KEY;
-    expect(r).toEqual({ lines: [{ label: "v", value: "2026-10-26T00:00:00Z|en,pt|abc|" }] });
+  it("gives an empty env without the secret", async () => {
+    expect(await run(({ env }) => [{ label: "n", value: Object.keys(env).length }])).toEqual({ lines: [{ label: "n", value: 0 }], warnings: [] });
   });
 
-  it("does not use a shell", async () => {
-    const r = await run([process.execPath, "-e", "console.log(process.argv[1])", "; echo pwned"]);
-    expect(r).toEqual({ error: expect.stringContaining("not JSON") });
+  it("fails on timeout and aborts the signal", async () => {
+    let signal: AbortSignal | undefined;
+    const r = await run((ctx) => { signal = ctx.signal; return new Promise(() => {}); }, { timeoutMs: 100 });
+    expect(r).toEqual({ error: "timed out after 0 s" });
+    expect(signal?.aborted).toBe(true);
   });
 
-  it("fails on timeout", async () => {
-    const r = await run(node("setTimeout(()=>{},60000)"), { timeoutMs: 200 });
-    expect(r).toEqual({ error: expect.stringContaining("timed out") });
+  it("turns an exception or a rejection into an error without echoing its message", async () => {
+    expect(await run(async () => { throw new Error("secret-token"); })).toEqual({ error: "the hook threw or rejected" });
+    expect(await run(() => { throw new Error("secret-token"); })).toEqual({ error: "the hook threw or rejected" });
+    expect(await run(() => Promise.reject("secret-token"))).toEqual({ error: "the hook threw or rejected" });
   });
 
-  it("fails on invalid output", async () => {
-    expect(await run(node('console.log("hello")'))).toEqual({ error: expect.stringContaining("not JSON") });
-    expect(await run(node('console.log("{}")'))).toEqual({ error: expect.stringContaining("not a JSON array") });
-    expect(await run(node('console.log(JSON.stringify([{label:"x"}]))'))).toEqual({ error: expect.stringContaining("row 1") });
+  it("keeps the first 10 rows and warns about the rest", async () => {
+    const r = await run(() => Array.from({ length: 12 }, (_, i) => ({ label: "n" + i, value: i })));
+    expect(r).toMatchObject({ lines: expect.arrayContaining([{ label: "n9", value: 9 }]), warnings: [expect.stringContaining("12 rows")] });
+    expect("lines" in r && r.lines).toHaveLength(10);
   });
 
-  it("fails on more than 10 rows", async () => {
-    const r = await run(node('console.log(JSON.stringify(Array.from({length:11},(_, i)=>({label:"n"+i,value:i}))))'));
-    expect(r).toEqual({ error: expect.stringContaining("11 rows") });
+  it("drops a label or value that is too long, with a warning", async () => {
+    const r = await run(() => [{ label: "x".repeat(61), value: 1 }, { label: "ok", value: "y".repeat(121) }, { label: "x".repeat(60), value: "y".repeat(120) }]);
+    expect(r).toEqual({ lines: [{ label: "x".repeat(60), value: "y".repeat(120) }], warnings: [expect.stringContaining("row 1 dropped: the label"), expect.stringContaining("row 2 dropped: the value")] });
   });
 
-  it("fails on a non-zero exit and on a missing program, without echoing output", async () => {
-    expect(await run(node('console.log("secret-token");process.exit(3)'))).toEqual({ error: "exited with code 3" });
-    expect(await run(["/nonexistent/program-xyz"])).toEqual({ error: expect.stringContaining("could not start") });
+  it("drops rows of an invalid type, with a warning", async () => {
+    const r = await run(() => [{ label: "a" }, { label: 1, value: 1 }, { label: "b", value: NaN }, { label: "c", value: { x: 1 } }, null, { label: " ", value: 1 }, { label: "ok", value: 0 }]);
+    expect(r).toMatchObject({ lines: [{ label: "ok", value: 0 }] });
+    expect("warnings" in r && r.warnings).toHaveLength(6);
+  });
+
+  it("fails when the hook does not return an array", async () => {
+    expect(await run(() => ({ label: "a", value: 1 }))).toEqual({ error: expect.stringContaining("array") });
+    expect(await run(() => undefined)).toEqual({ error: expect.stringContaining("array") });
   });
 
   it("rejects bad dotenv text", async () => {
-    expect(await run(node("1"), { envText: "not a pair" })).toEqual({ error: expect.stringContaining("dotenv") });
+    expect(await run(() => [], { envText: "not a pair" })).toEqual({ error: expect.stringContaining("dotenv") });
     expect(parseDotenv("A=1\nB='x y'")).toEqual({ A: "1", B: "x y" });
   });
 });
@@ -90,13 +92,20 @@ describe("weekpost metrics with the hook", () => {
   });
 
   it("shows the rows on success", async () => {
-    const { out } = await exec({ metrics: { extra: { command: node('console.log(JSON.stringify([{label:"Sign-ups",value:12}]))') } } });
+    const { out } = await exec({ metrics: { extra: async () => [{ label: "Sign-ups", value: 12 }] } });
     expect(out.markdown).toContain("- Sign-ups: 12");
   });
 
   it("turns a failing hook into an Attention line and still exits 0", async () => {
-    const { code, out } = await exec({ metrics: { extra: { command: node("process.exit(1)") } } });
+    const { code, out } = await exec({ metrics: { extra: async () => { throw new Error("boom"); } } });
     expect(code).toBe(0);
     expect(out.attention.join("\n")).toContain("hook failed");
+  });
+
+  it("reads WEEKPOST_METRICS_EXTRA_ENV into env and warns about a row that is too long", async () => {
+    const { code, out } = await exec({ metrics: { extra: async ({ env }: { env: Record<string, string> }) => [{ label: "Key", value: env.API_KEY ?? "none" }, { label: "x".repeat(61), value: 1 }] } }, { WEEKPOST_METRICS_EXTRA_ENV: "API_KEY=abc" });
+    expect(code).toBe(0);
+    expect(out.markdown).toContain("- Key: abc");
+    expect(out.attention.join("\n")).toContain("row 2 dropped");
   });
 });
