@@ -11,6 +11,7 @@ When `doctor`, `first-post` or `metrics` reports a problem. Back to the [README]
 | `logins` fails: not logged in | `gh` or `wrangler` has no session | `gh auth login` and `npx wrangler@4 login`, then `doctor` again (step 4 of [setup](setup.md#4-create-the-accounts)) |
 | `openrouter`: key rejected | wrong or revoked key | create a new key, then `npx weekpost setup --apply --only=github.secrets` |
 | `openrouter` warns: no credit limit | key without a cap | set a limit at openrouter.ai/settings/keys |
+| `token.<account>.insights` warns: cannot read Insights | the token lacks `instagram_business_manage_insights`; posts still publish, only `weekpost metrics` is affected | in the Meta panel, generate a new token with that permission added, then `npx weekpost token <account>` |
 | `supabase.key`: publishable key | you copied the wrong key | copy the `sb_secret_...` key (step 4 of [setup](setup.md#4-create-the-accounts)), then `npx weekpost setup --apply --only=local.secrets` |
 | `supabase.schema` fails | migrations not applied | `npx weekpost setup --apply --only=db.migrate` (or `--print` and paste the SQL) |
 | `supabase.bucket` fails | bucket missing | `npx weekpost setup --apply --only=storage.bucket` |
