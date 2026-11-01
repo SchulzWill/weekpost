@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { ExtraContext as PublicContext, ExtraHook as PublicHook } from "../index.ts";
 import { runExtra, parseDotenv, type ExtraHook, type ExtraResult } from "./extra.ts";
 import { runMetrics } from "../cli/metrics.ts";
 import { buildReport } from "./report.ts";
@@ -21,6 +22,11 @@ describe("runExtra", () => {
     const r = await run((ctx) => { signal = ctx.signal; return new Promise(() => {}); }, { timeoutMs: 100 });
     expect(r).toEqual({ error: "timed out after 0 s" });
     expect(signal?.aborted).toBe(true);
+  });
+
+  it("passes a live signal that is not aborted before the timeout, and exports the hook types", async () => {
+    const hook: PublicHook = async ({ signal }: PublicContext) => [{ label: "aborted", value: String(signal.aborted) }];
+    expect(await run(hook)).toEqual({ lines: [{ label: "aborted", value: "false" }], warnings: [] });
   });
 
   it("turns an exception or a rejection into an error without echoing its message", async () => {
