@@ -68,7 +68,7 @@ flowchart LR
 3. **Preview:** when the copy looks right, add the `media-ok` label to the pull request. That is your go-ahead to spend on media. weekpost generates every image, voice-over, carousel and Reel, and links a preview with the week's cost.
 4. **Approve:** merge. The exact media from the preview goes to the queue, and a comment on the pull request says what was scheduled, skipped or canceled. If a run fails halfway, running it again is safe. Details in [docs/operate.md](docs/operate.md).
 5. **Publish:** your worker publishes each post at its scheduled time, without double-posting, and retries on failure.
-6. **Learn (partly built):** `npx weekpost metrics` prints the week's Instagram numbers. The scheduled issue and the agent reading them are next.
+6. **Learn (partly built):** `npx weekpost metrics` prints the week's Instagram numbers. The `weekpost-metrics` Action publishes the report as a GitHub issue every Monday; the agent reading it is next.
 
 ## What exists and what does not
 
@@ -83,7 +83,7 @@ flowchart LR
 | Guided setup (`init`, `setup`, `token`, `doctor`, `first-post`) | available |
 | Topic sources for the agent (`sources pull`, `ideasFile`) | available |
 | Agent files for Claude Code and Codex | available; Claude Code is the one tested |
-| Weekly metrics report (`metrics`) | available; the scheduled Action that posts it weekly and the agent reading it are next |
+| Weekly metrics report (`metrics`) | available; the `weekpost-metrics` Action posts it weekly as an issue, and the agent reading it is next |
 | Project upgrade command | not built |
 | Local image generation (ComfyUI) | not built |
 | Networks other than Instagram | not built |
@@ -176,7 +176,7 @@ No. Each person creates their own Meta app and uses it on accounts they own or m
 
 No dates. In rough order:
 
-- A scheduled Action that posts the weekly metrics report, and the agent reading it before it drafts the next week (the `metrics` command already exists).
+- The agent reading the weekly metrics issue before it drafts the next week.
 - A command to upgrade a project to a newer weekpost.
 - Local image generation (ComfyUI) as an alternative to OpenRouter.
 - Networks other than Instagram.

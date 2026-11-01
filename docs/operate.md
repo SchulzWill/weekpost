@@ -9,6 +9,9 @@ Day-to-day use: the workflows, the queue commands, topic sources and the Worker 
 | `weekpost-check` | every pull request that touches `content/` or the config | none |
 | `weekpost-preview` | label `media-ok` on a pull request from a branch of the same repository, and again on every push while the label stays | `OPENROUTER_API_KEY` |
 | `weekpost-enqueue` | push to `main` that touches a week folder, or manually with a pull request number (the job refuses any ref other than `main`) | `WEEKPOST_SUPABASE_URL`, `WEEKPOST_SUPABASE_KEY` (environment `weekpost`) |
+| `weekpost-metrics` | every Monday at 08:00 UTC, or manually (the job refuses any ref other than `main`) | `WEEKPOST_SUPABASE_URL`, `WEEKPOST_SUPABASE_KEY` (environment `weekpost`); optional `WEEKPOST_METRICS_EXTRA_ENV` for your own extra numbers. The token needs `instagram_business_manage_insights`; without it the issue says so instead of failing |
+
+Set up before `weekpost-metrics` existed? Copy `.github/workflows/weekpost-metrics.yml` from the weekpost template (`node_modules/weekpost/template/.github/workflows/weekpost-metrics.yml`) into your repo, then run `gh label create metrics` (or `npx weekpost setup --apply --only=github.label`). `doctor` warns while the file is missing.
 
 Several merges in a row all reach the queue: the enqueue runs once per merge and runs may overlap. Every queued row remembers the commit that wrote it (`--commit`, which the workflow sets to the merge commit), and a run only cancels or rewrites rows written by its own commit or an ancestor of it. So re-running an old merge, or two runs finishing out of order, never undoes what a newer merge queued: those rows are left alone and the comment lists them as skipped (`queued by a newer commit`). The workflow checks out the full history so git can answer that question.
 
@@ -41,7 +44,7 @@ npx weekpost metrics                     # read Instagram Insights and print the
 - `--json` prints the data instead of the text.
 - `--write` stores the numbers in `weekpost_metrics`.
 - `--issue` creates or rewrites one GitHub issue per week, titled `weekpost metrics: <YYYY-Www>` (label `metrics`). It needs the repository and a token that may write issues: from `GITHUB_REPOSITORY` and `GITHUB_TOKEN`, or `--repo=<owner/name>`. To run it yourself: `GITHUB_TOKEN=$(gh auth token) npx weekpost metrics --issue --repo=<owner/name>`.
-- A scheduled Action for `--write` and `--issue` is not shipped yet; run them yourself. They are blocked for Claude Code, and Codex asks you.
+- The `weekpost-metrics` Action runs `metrics --write --issue` every week, so you do not need to. You can still run it by hand from a terminal (your agent cannot: Claude Code blocks it and Codex asks first). To trigger the Action now: `gh workflow run weekpost-metrics`.
 - Missing data never fails the run: it becomes an Attention line. Reading Insights needs the `instagram_business_manage_insights` permission on the token.
 
 `token` needs a terminal (it refuses to run from an agent shell). Copy the long-lived token from the Meta panel and run `npx weekpost token en`: it reads the clipboard (or a hidden prompt with `--prompt`), confirms on the Graph API that the token belongs to the account's handle and may publish, saves it in `weekpost_tokens` (59 days) and clears the clipboard. It never prints the token.
@@ -77,7 +80,7 @@ The Worker logs one JSON line per event. In the Cloudflare dashboard, open the W
 | `ERROR_maintenance` | cleaning old media or looking for stuck posts failed | usually temporary; check the Supabase status if it repeats |
 | `ERROR_run` | the whole run failed | read the `error` field; usually a wrong URL or key |
 
-A post that fails but is still retried logs `post_failed` without the `ERROR` prefix. When it fails for good, `status --failed` lists it with the reason. The Worker does not notify you: until a scheduled metrics Action exists, run `status --failed` (or `metrics`) after publishing days.
+A post that fails but is still retried logs `post_failed` without the `ERROR` prefix. When it fails for good, `status --failed` lists it with the reason. The Worker does not notify you: the weekly metrics issue lists failed posts, and between issues you can run `status --failed` (or `metrics`) after publishing days.
 
 ## Limits
 
