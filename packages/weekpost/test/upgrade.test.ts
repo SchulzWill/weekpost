@@ -168,10 +168,65 @@ describe("weekpost upgrade --plan", () => {
     const by = Object.fromEntries(json.files.map((f: any) => [f.path, f]));
     expect(by["worker/wrangler.toml"].state).toBe("edited");
     expect(by["worker/wrangler.toml"].diff).toContain("-# mine");
-    expect(by["AGENTS.md"].state).toBe("update");
+    expect(by["AGENTS.md"].state).toBe("record");
     // The preview label comes from the config, so the workflows still match.
-    expect(by[".github/workflows/weekpost-preview.yml"].state).toBe("update");
+    expect(by[".github/workflows/weekpost-preview.yml"].state).toBe("record");
+    // Identical files are only recorded: they are not counted as changes.
+    expect(json.toChange).toBe(json.files.filter((f: any) => f.state !== "record").length);
+    expect(json.toChange).toBe(1);
+    expect(json.warnings.join("\n")).toContain("files dropped from the template aren't detected");
     expect(existsSync(join(dir, LOCK_FILE))).toBe(false);
+  });
+
+  it("counts record files out of 'to change' in the text", async () => {
+    const dir = await project();
+    rmSync(join(dir, LOCK_FILE));
+    commit(dir, "old project");
+    const c = cap();
+    expect(await runUpgrade(["--plan", `--project=${dir}`], c.out, dir, deps())).toBe(0);
+    expect(c.text()).toMatch(/record\s+AGENTS.md\s+\(identical; only added to the lock\)/);
+    expect(c.text()).toContain("0 to change");
+  });
+
+  it("says it is already on the installed version, numbers sections 1-5 and marks an empty section ok", async () => {
+    const dir = await project();
+    const c = cap();
+    expect(await runUpgrade(["--plan", `--project=${dir}`], c.out, dir, deps({ installed: "0.1.0" }))).toBe(0);
+    const t = c.text();
+    expect(t).toContain("Already on 0.1.0 (the lock matches the installed version); nothing to upgrade.");
+    expect(t).not.toContain("Nothing blocks");
+    expect(t).toMatch(/1\. Version and files\nok/);
+    for (const h of ["2. Content", "3. Migrations", "4. Files", "5. Setup steps still to do"]) expect(t).toContain(h);
+    expect(t).toContain("(does not block)");
+  });
+
+  it("explains the labels and the next step when files change, and what to fix when blocked", async () => {
+    const dir = await project();
+    append(dir, "worker/wrangler.toml", "# mine\n");
+    commit(dir, "my edit");
+    const templateRoot = newTemplate((root) => append(root, "worker/wrangler.toml", "# theirs\n"));
+    const c = cap();
+    expect(await runUpgrade(["--plan", `--project=${dir}`], c.out, dir, deps({ templateRoot }))).toBe(0);
+    expect(c.text()).toContain("edited = you changed it; the diff shows your version (-) against the new one (+); upgrade will not overwrite it without asking");
+    expect(c.text()).toContain("Applying it isn't available yet: to take the new files now, copy them by hand from the diffs above and commit.");
+    append(dir, "AGENTS.md", "\nunsaved\n");
+    const b = cap();
+    expect(await runUpgrade(["--plan", `--project=${dir}`], b.out, dir, deps({ templateRoot }))).toBe(1);
+    expect(b.text()).toContain("Fix the 1 problem(s) marked BLOCKED, commit, and run `weekpost upgrade --plan` again.");
+  });
+
+  it("explains why a schema error blocks in a week that has already gone out", async () => {
+    const dir = await project();
+    addWeek(dir, "2026-W42", post(PAST).replace(/    cta:.*\n/, ""));
+    commit(dir, "past week without cta");
+    const { code, json } = await plan(dir);
+    expect(code).toBe(1);
+    expect(json.blockers[0]).toMatchObject({ item: 4, week: "2026-W42" });
+    expect(json.blockers[0].message).toContain("this week has already gone out, but its posts.yaml must still pass the new schema: add the missing field or delete the week");
+    addWeek(dir, "2027-W09", post(FUTURE).replace(/    cta:.*\n/, ""));
+    commit(dir, "future week without cta");
+    const future = await plan(dir);
+    expect(future.json.blockers.find((b: any) => b.week === "2027-W09").message).not.toContain("already gone out");
   });
 
   it("blocks and exits 1 on a contract error, naming the week, and writes nothing", async () => {
@@ -252,6 +307,11 @@ describe("weekpost upgrade --plan", () => {
     expect(Object.keys(json)).toEqual(expect.arrayContaining(["blocked", "installed", "lockVersion", "blockers", "warnings", "content", "migrations", "files", "steps"]));
     const c = cap();
     expect(await runUpgrade([], c.out, dir)).toBe(2);
+    const h = cap();
+    expect(await runUpgrade(["--help"], h.out, dir)).toBe(0);
+    expect(h.text()).toContain("usage: weekpost upgrade --plan");
+    expect(h.text()).toContain("Run after installing a new weekpost: lists what it would change in this project. Writes nothing.");
+    expect(await main(["upgrade", "--help"])).toBe(0);
     expect(await runUpgrade(["--plan", "--bogus"], c.out, dir)).toBe(2);
     expect(await runUpgrade(["--apply"], c.out, dir)).toBe(2);
     expect(c.text()).toContain("not available in this version");

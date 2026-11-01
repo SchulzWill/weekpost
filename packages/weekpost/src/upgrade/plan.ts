@@ -19,7 +19,7 @@ const USER_FILES = new Set(["weekpost.config.ts", "BRIEF.md", "PRIVACY.md", ".gi
 const USER_DIRS = ["content/", "assets/"];
 export const isUserOwned = (path: string) => USER_FILES.has(path) || USER_DIRS.some((d) => path.startsWith(d));
 
-export type FileState = "update" | "edited" | "new" | "removed";
+export type FileState = "update" | "edited" | "new" | "removed" | "record";
 export type FileEntry = { path: string; state: FileState; note?: string; /** Unified diff of the file on disk against the new one (`edited` only). */ diff?: string };
 export type Blocker = { item: 1 | 2 | 3 | 4; message: string; week?: string };
 export type MigrationReport = { state: "ok" | "pending" | "unknown"; detail: string; current: number | null; latest: number; pending: string[] };
@@ -37,6 +37,8 @@ export type UpgradePlan = {
   files: FileEntry[] | null;
   /** Files whose new version equals what is on disk, or that you edited and the new version leaves alone. */
   unchanged: number;
+  /** Files that would change: every entry of `files` except `record` ones (identical to the template, only added to the lock). */
+  toChange: number;
   /** Setup steps that are `todo` with this version. */
   steps: StepReport[] | null;
 };
@@ -59,6 +61,16 @@ export function compareVersions(a: string, b: string): number {
   const y = numbers(b);
   for (let i = 0; i < Math.max(x.length, y.length, 3); i++) if ((x[i] ?? 0) !== (y[i] ?? 0)) return (x[i] ?? 0) - (y[i] ?? 0);
   return 0;
+}
+
+const PAST_WEEK_NOTE = " (this week has already gone out, but its posts.yaml must still pass the new schema: add the missing field or delete the week)";
+/** True when the last day (Sunday, UTC) of an ISO week `YYYY-Www` is before `now`. */
+function weekEnded(week: string, now: Date): boolean {
+  const m = /^(\d{4})-W(\d{2})$/.exec(week);
+  if (!m) return false;
+  const jan4 = Date.UTC(Number(m[1]), 0, 4);
+  const monday = jan4 - ((new Date(jan4).getUTCDay() + 6) % 7) * 86400000 + (Number(m[2]) - 1) * 7 * 86400000;
+  return monday + 7 * 86400000 <= now.getTime();
 }
 
 type LockRead = { lock: Lock } | { error: string } | null;
@@ -125,7 +137,7 @@ function planFiles(projectRoot: string, lock: Lock | null, answers: Answers, tem
       files.push({ path, state: "new", ...(path in locked ? { note: "in the lock but missing on disk" } : {}) });
     } else if (!lock) {
       // No lock: compare with the new template. The same bytes are recorded in the lock; different ones are yours.
-      if (diskHash === newHash) files.push({ path, state: "update", note: "same as the new template; it will only be recorded in the lock" });
+      if (diskHash === newHash) files.push({ path, state: "record", note: "identical; only added to the lock" });
       else edited(path, disk, content, "no lock to tell your edits from the old template");
     } else if (!(path in locked)) {
       edited(path, disk, content, "not in the lock, and different from the new file");
@@ -155,7 +167,7 @@ export async function planUpgrade(projectRoot: string, deps: PlanDeps = {}): Pro
   const templateRoot = deps.templateRoot ?? TEMPLATE_DIR;
   const blockers: Blocker[] = [];
   const warnings: string[] = [];
-  const plan: UpgradePlan = { blocked: false, installed, lockVersion: null, blockers, warnings, content: null, migrations: null, files: null, unchanged: 0, steps: null };
+  const plan: UpgradePlan = { blocked: false, installed, lockVersion: null, blockers, warnings, content: null, migrations: null, files: null, unchanged: 0, toChange: 0, steps: null };
 
   // 1. The lock against the installed version.
   const read = readLock(projectRoot);
@@ -167,7 +179,7 @@ export async function planUpgrade(projectRoot: string, deps: PlanDeps = {}): Pro
       blockers.push({ item: 1, message: `the lock says weekpost ${lock.weekpost} but ${installed} is installed: that would be a downgrade. Install ${lock.weekpost} or newer` });
     }
   } else if (!read) {
-    warnings.push(`no ${LOCK_FILE}: this project was created before the lock existed, so your files are compared with the new template and any difference counts as your edit`);
+    warnings.push(`no ${LOCK_FILE}: this project was created before the lock existed, so your files are compared with the new template and any difference counts as your edit. Without a lock, files dropped from the template aren't detected`);
   }
 
   // 3 (first, the rest needs it). The config in the new schema.
@@ -190,6 +202,7 @@ export async function planUpgrade(projectRoot: string, deps: PlanDeps = {}): Pro
     const { files, unchanged } = planFiles(projectRoot, lock, answers, templateRoot, today);
     plan.files = files;
     plan.unchanged = unchanged;
+    plan.toChange = files.filter((f) => f.state !== "record").length;
   }
 
   // 2. Git clean on the generated files.
@@ -202,7 +215,10 @@ export async function planUpgrade(projectRoot: string, deps: PlanDeps = {}): Pro
   if (config) {
     const { weeks, issues } = checkContent(join(projectRoot, "content"), config, undefined, undefined, { now });
     plan.content = { weeks: weeks.length, errors: issues.filter((i) => i.level === "error"), warnings: issues.filter((i) => i.level === "warn") };
-    for (const i of plan.content.errors) blockers.push({ item: 4, message: `${i.where}: ${i.message}`, ...(i.week ? { week: i.week } : {}) });
+    for (const i of plan.content.errors) {
+      const gone = i.week && weekEnded(i.week, now) ? PAST_WEEK_NOTE : "";
+      blockers.push({ item: 4, message: `${i.where}: ${i.message}${gone}`, ...(i.week ? { week: i.week } : {}) });
+    }
   }
 
   // 5 and 7 need the setup context (credentials, runner); 5 reads the REST API only.
