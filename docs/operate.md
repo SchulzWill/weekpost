@@ -9,7 +9,7 @@ Day-to-day use: the workflows, the queue commands, topic sources and the Worker 
 | `weekpost-check` | every pull request that touches `content/` or the config | none |
 | `weekpost-preview` | label `media-ok` on a pull request from a branch of the same repository, and again on every push while the label stays | `OPENROUTER_API_KEY` |
 | `weekpost-enqueue` | push to `main` that touches a week folder, or manually with a pull request number (the job refuses any ref other than `main`) | `WEEKPOST_SUPABASE_URL`, `WEEKPOST_SUPABASE_KEY` (environment `weekpost`) |
-| `weekpost-metrics` | every Monday at 08:00 UTC, or manually (the job refuses any ref other than `main`) | `WEEKPOST_SUPABASE_URL`, `WEEKPOST_SUPABASE_KEY` (environment `weekpost`). The token needs `instagram_business_manage_insights`; without it the issue says so instead of failing |
+| `weekpost-metrics` | every Monday at 08:00 UTC, or manually (the job refuses any ref other than `main`) | `WEEKPOST_SUPABASE_URL`, `WEEKPOST_SUPABASE_KEY` (environment `weekpost`); optional `WEEKPOST_METRICS_EXTRA_ENV` for your own extra numbers. The token needs `instagram_business_manage_insights`; without it the issue says so instead of failing |
 
 Set up before `weekpost-metrics` existed? Copy `.github/workflows/weekpost-metrics.yml` from the weekpost template (`node_modules/weekpost/template/.github/workflows/weekpost-metrics.yml`) into your repo, then run `gh label create metrics` (or `npx weekpost setup --apply --only=github.label`). `doctor` warns while the file is missing.
 

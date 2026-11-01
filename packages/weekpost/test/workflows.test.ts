@@ -154,6 +154,7 @@ describe("workflow templates", () => {
       WEEKPOST_SUPABASE_KEY: "${{ secrets.WEEKPOST_SUPABASE_KEY }}",
       GITHUB_TOKEN: "${{ github.token }}",
       GITHUB_REPOSITORY: "${{ github.repository }}",
+      WEEKPOST_METRICS_EXTRA_ENV: "${{ secrets.WEEKPOST_METRICS_EXTRA_ENV }}",
     });
   });
 

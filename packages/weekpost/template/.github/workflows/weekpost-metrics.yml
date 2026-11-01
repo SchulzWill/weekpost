@@ -46,4 +46,6 @@ jobs:
           WEEKPOST_SUPABASE_KEY: ${{ secrets.WEEKPOST_SUPABASE_KEY }}
           GITHUB_TOKEN: ${{ github.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
+          # Optional: dotenv for the metrics.extra hook in weekpost.config.ts (empty when the secret is not set).
+          WEEKPOST_METRICS_EXTRA_ENV: ${{ secrets.WEEKPOST_METRICS_EXTRA_ENV }}
         run: npx weekpost metrics --write --issue
