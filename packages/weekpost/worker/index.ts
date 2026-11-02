@@ -5,6 +5,7 @@
 import { supabaseDb } from "../src/queue/supabase.ts";
 import { supabaseStorage } from "../src/queue/storage.ts";
 import { GRAPH_API_VERSION, InstagramGraph } from "../src/publisher/instagram.ts";
+import type { LoginMode } from "../src/queue/types.ts";
 import { DEFAULT_RUN_OPTIONS, resolveOptions, run, type RunOptions } from "../src/publisher/run.ts";
 
 /** Secrets (`wrangler secret put`) and plain vars of the Worker. */
@@ -53,10 +54,12 @@ export async function runFromEnv(
   let calls = 0;
   const counted: typeof fetch = (...a) => (calls++, fetchFn(...a));
   const options = optionsFromEnv(env);
+  // One client per login mode, built on first use; every one counts its calls on the same `fetch`.
+  const clients: Partial<Record<LoginMode, InstagramGraph>> = {};
   return run(options, {
     db: supabaseDb(env.WEEKPOST_SUPABASE_URL, env.WEEKPOST_SUPABASE_KEY, counted),
     storage: supabaseStorage(env.WEEKPOST_SUPABASE_URL, env.WEEKPOST_SUPABASE_KEY, env.WEEKPOST_BUCKET || "weekpost-media", counted),
-    graph: new InstagramGraph(counted, options.graphVersion),
+    graph: (login) => (clients[login] ??= new InstagramGraph(counted, options.graphVersion, login)),
     now: Date.now,
     sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
     log,

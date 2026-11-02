@@ -11,7 +11,7 @@
 //   Default of 2 posts: tokens 1 + claim 1 + maintenance 6 + 2 x 20 = 48, which leaves room for ONE renewal (2) = 50.
 //   With two accounts renewing in the same run the room is 38 and `claim` is asked for 1 post. `claim` is asked
 //   only for as many posts as the remaining budget covers at the worst case (20 each).
-import type { PublisherDb, Storage, Token } from "../queue/types.ts";
+import type { LoginMode, PublisherDb, Storage, Token } from "../queue/types.ts";
 import { GRAPH_API_VERSION, type InstagramGraph } from "./instagram.ts";
 import { purgeOldMedia, PURGE_AFTER_DAYS } from "./cleanup.ts";
 import { MAX_POLLS, processPost, type Outcome } from "./publish.ts";
@@ -33,7 +33,11 @@ export interface RunOptions {
 export interface RunDeps {
   db: PublisherDb;
   storage: Pick<Storage, "sign" | "remove">;
-  graph: InstagramGraph;
+  /**
+   * The Graph client of a login mode (a token row's `login`; absent is `instagram`). Each post goes through the client
+   * of its account's token. The adapter builds at most one client per mode; the subrequest budget is the same.
+   */
+  graph(login: LoginMode): InstagramGraph;
   now(): number;
   sleep(ms: number): Promise<void>;
   log(event: string, data: Record<string, unknown>): void;
@@ -72,7 +76,8 @@ export async function run(options: Partial<RunOptions>, d: RunDeps): Promise<{ c
   try {
     const tokens = new Map<string, Token>((await d.db.tokens()).map((t) => [t.account, t]));
     if (tokens.size === 0) d.log("ERROR_no_token", {});
-    await refreshTokens(tokens, d.db, d.graph, d.now(), d.log, { refresh: o.refreshTokens });
+    // Only Instagram Login tokens are ever renewed, so the renewal always goes through that client.
+    await refreshTokens(tokens, d.db, d.graph("instagram"), d.now(), d.log, { refresh: o.refreshTokens });
 
     const limit = claimLimit(o, d);
     if (limit < o.maxPostsPerRun) {
@@ -80,11 +85,12 @@ export async function run(options: Partial<RunOptions>, d: RunDeps): Promise<{ c
     }
     const posts = limit > 0 ? await d.db.claim(limit) : [];
     claimed = posts.length;
-    const deps = { db: d.db, storage: d.storage, graph: d.graph, sleep: d.sleep, log: d.log, signedUrlTtlSeconds: o.signedUrlTtlSeconds };
     // Different accounts in parallel gain nothing (the subrequest budget is the limit): one at a time.
     for (const post of posts) {
       try {
-        outcomes.push(await processPost(post, tokens.get(post.account), deps));
+        const token = tokens.get(post.account);
+        const graph = d.graph(token?.login ?? "instagram");
+        outcomes.push(await processPost(post, token, { db: d.db, storage: d.storage, graph, sleep: d.sleep, log: d.log, signedUrlTtlSeconds: o.signedUrlTtlSeconds }));
       } catch (e) {
         // Not even markFailed reached the database: the post stays in `publishing` (safe) and the others go on.
         d.log("ERROR_post", { post: post.postId, account: post.account, error: String((e as Error).message) });

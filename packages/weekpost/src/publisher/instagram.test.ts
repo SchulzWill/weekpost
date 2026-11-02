@@ -34,6 +34,36 @@ const PATHS = [
   "/v26.0/med", "/v26.0/med/insights", "/v26.0/90/insights", "/v26.0/90", "/v26.0/me", "/v26.0/90/content_publishing_limit",
 ];
 
+describe("assignedAccounts (Unified login)", () => {
+  it("reads every page on graph.facebook.com by the after cursor, with the token only in the header", async () => {
+    const calls: { url: string; auth: string | null }[] = [];
+    const pages = [
+      { data: [{ id: "1", username: "a" }, { id: 2, username: "b" }], paging: { cursors: { after: "c1" }, next: `https://graph.facebook.com/next?access_token=${TOKEN}` } },
+      { data: [{ id: "3", username: "c" }, { username: "no-id" }], paging: { cursors: { after: "c2" } } },
+    ];
+    const fetchFn = (async (url: string, init?: RequestInit) => {
+      calls.push({ url: String(url), auth: new Headers(init?.headers).get("authorization") });
+      return new Response(JSON.stringify(pages[calls.length - 1]));
+    }) as unknown as typeof fetch;
+    const accounts = await new InstagramGraph(fetchFn, "v26.0", "unified").assignedAccounts(TOKEN);
+    expect(accounts).toEqual([{ id: "1", username: "a" }, { id: "2", username: "b" }, { id: "3", username: "c" }]);
+    expect(calls.map((c) => c.url)).toEqual([
+      "https://graph.facebook.com/v26.0/me/assigned_instagram_accounts?fields=id%2Cusername",
+      "https://graph.facebook.com/v26.0/me/assigned_instagram_accounts?fields=id%2Cusername&after=c1",
+    ]);
+    expect(calls.every((c) => c.auth === `Bearer ${TOKEN}` && !c.url.includes(TOKEN))).toBe(true);
+  });
+
+  it("stops at maxPages and rejects a response without data", async () => {
+    let n = 0;
+    const loop = (async () => (n++, new Response(JSON.stringify({ data: [], paging: { cursors: { after: `c${n}` }, next: "x" } })))) as unknown as typeof fetch;
+    await new InstagramGraph(loop, "v26.0", "unified").assignedAccounts(TOKEN, 3);
+    expect(n).toBe(3);
+    const bad = (async () => new Response("{}")) as unknown as typeof fetch;
+    await expect(new InstagramGraph(bad, "v26.0", "unified").assignedAccounts(TOKEN)).rejects.toBeInstanceOf(GraphError);
+  });
+});
+
 describe("InstagramGraph host by login mode", () => {
   it("uses graph.instagram.com by default and for the instagram mode, with the same paths", async () => {
     const a = harness();

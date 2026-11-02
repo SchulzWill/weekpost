@@ -17,7 +17,7 @@ const SHA = "3d3c42e5aac5ba805825da76410c181273ba90b1";
 type World = {
   runs: Record<string, Partial<RunResult>>;
   http: Record<string, [number, unknown]>;
-  tokens: { account: string; igUserId: string; accessToken: string; expiresAt: string; refreshedAt: string }[];
+  tokens: { account: string; igUserId: string; accessToken: string; expiresAt: string | null; refreshedAt: string; login?: "instagram" | "unified" }[];
   uses: string[];
   node: string;
   env: Record<string, string>;
@@ -211,6 +211,69 @@ describe("weekpost doctor", () => {
       expect(r.code).toBe(1);
     }
     expect(find((await greenDoctor((w) => (w.tokens = [row({ expiresAt: t(8) })]))).checks, "token.en").level).toBe("ok");
+  });
+
+  it("names the login mode of each saved token", async () => {
+    expect(find((await greenDoctor()).checks, "token.en.login")).toMatchObject({ level: "ok", detail: "Instagram Login" });
+  });
+
+  describe("Unified login token", () => {
+    const UNI = "SENTINEL-EAAG-unified-0123456789abcdef";
+    const t = (days: number) => new Date(NOW.getTime() + days * 86_400_000).toISOString();
+    const unified = (over: object = {}) => (w: World) => {
+      w.tokens = [{ account: "en", igUserId: "70001", accessToken: UNI, expiresAt: null, refreshedAt: NOW.toISOString(), login: "unified", ...over }];
+      w.http["graph.facebook.com/v26.0/me/assigned_instagram_accounts?fields=id%2Cusername"] = [200, { data: [{ id: "70001", username: "MyApp" }] }];
+      w.http["graph.facebook.com/v26.0/70001/content_publishing_limit"] = [200, { data: [] }];
+      w.http["graph.facebook.com/v26.0/70001/insights"] = [200, { data: [{ name: "reach", total_value: { value: 3 } }] }];
+    };
+
+    it("without expiry is ok, checked on graph.facebook.com only", async () => {
+      const r = await greenDoctor(unified());
+      expect(find(r.checks, "token.en")).toMatchObject({ level: "ok", detail: expect.stringContaining("does not expire") });
+      expect(find(r.checks, "token.en.login")).toMatchObject({ level: "ok", detail: "Unified login" });
+      const meta = r.httpCalls.filter((c) => /graph\.(instagram|facebook)\.com/.test(c.url));
+      expect(meta.length).toBe(3);
+      expect(meta.every((c) => c.url.startsWith("https://graph.facebook.com/"))).toBe(true);
+      expect(meta.some((c) => /\/me\?/.test(c.url))).toBe(false);
+      expect(r.text).not.toContain(UNI);
+      expect(r.code).toBe(0);
+    });
+
+    it("with a 60-day expiry warns two weeks ahead, not before", async () => {
+      const r = await greenDoctor(unified({ expiresAt: t(10) }));
+      const c = find(r.checks, "token.en");
+      expect(c.level).toBe("warn");
+      expect(c.detail).toContain("generated with a 60-day expiry");
+      expect(c.detail).toContain("Regenerate it with the expiry set to never");
+      expect(r.code).toBe(0);
+      expect(find((await greenDoctor(unified({ expiresAt: t(30) }))).checks, "token.en").level).toBe("ok");
+      expect(find((await greenDoctor(unified({ expiresAt: t(-1) }))).checks, "token.en")).toMatchObject({ level: "fail", detail: "the saved token has expired" });
+    });
+
+    it("fails when the saved ig_user_id is not among the token's accounts, or has another handle", async () => {
+      const gone = await greenDoctor((w) => {
+        unified()(w);
+        w.http["graph.facebook.com/v26.0/me/assigned_instagram_accounts?fields=id%2Cusername"] = [200, { data: [{ id: "999", username: "myapp" }] }];
+      });
+      expect(find(gone.checks, "token.en")).toMatchObject({ level: "fail", detail: expect.stringContaining("70001"), fix: "npx weekpost token en" });
+      expect(gone.code).toBe(1);
+      const renamed = await greenDoctor((w) => {
+        unified()(w);
+        w.http["graph.facebook.com/v26.0/me/assigned_instagram_accounts?fields=id%2Cusername"] = [200, { data: [{ id: "70001", username: "other" }] }];
+      });
+      expect(find(renamed.checks, "token.en")).toMatchObject({ level: "fail", detail: expect.stringContaining("@other") });
+    });
+
+    it("names the Unified login Insights permission", async () => {
+      const r = await greenDoctor((w) => {
+        unified()(w);
+        w.http["graph.facebook.com/v26.0/70001/insights"] = [400, { error: { message: "(#10) Application does not have permission for this action", code: 10 } }];
+      });
+      const c = find(r.checks, "token.en.insights");
+      expect(c.level).toBe("warn");
+      expect(c.detail).toContain("`instagram_manage_insights`");
+      expect(c.fix).toContain("Unified login configuration");
+    });
   });
 
   it("warns, without failing, when the token cannot read Insights", async () => {

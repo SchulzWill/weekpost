@@ -1,6 +1,6 @@
 // Test doubles: a stateful Meta (mocked fetch) and an in-memory PublisherDb with the same semantics as the SQL functions.
-import type { Key, PublisherDb, QueueRow, Storage, Token } from "../src/queue/types.ts";
-import { InstagramGraph } from "../src/publisher/instagram.ts";
+import type { Key, LoginMode, PublisherDb, QueueRow, Storage, Token } from "../src/queue/types.ts";
+import { GRAPH_API_VERSION, InstagramGraph } from "../src/publisher/instagram.ts";
 
 export const TOKEN = "IGAAtoken-secret-1234567890abcdef";
 export const IG_USER = "ig-user-1";
@@ -49,7 +49,7 @@ export class FakeMeta {
     if (params.fields === "permalink") return json({ permalink: `https://www.instagram.com/p/${id}/`, id });
     return json({ error: { message: "unknown route" } }, 404);
   };
-  graph = () => new InstagramGraph(this.fetch as typeof fetch);
+  graph = (login: LoginMode = "instagram") => new InstagramGraph(this.fetch as typeof fetch, GRAPH_API_VERSION, login);
   count = (re: RegExp) => this.calls.filter((c) => re.test(c.path)).length;
 }
 

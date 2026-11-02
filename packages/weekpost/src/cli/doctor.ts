@@ -5,10 +5,10 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { ConfigError } from "../config/parse.ts";
-import { insightsAccess } from "../metrics/access.ts";
+import { INSIGHTS_PERMISSION, insightsAccess } from "../metrics/access.ts";
 import { GRAPH_API_VERSION, GraphError, InstagramGraph, redact } from "../publisher/instagram.ts";
 import { supabaseDb } from "../queue/supabase.ts";
-import type { PublisherDb } from "../queue/types.ts";
+import type { LoginMode, PublisherDb } from "../queue/types.ts";
 import { probe } from "../setup/probes.ts";
 import { WRANGLER_PKG } from "../setup/runner.ts";
 import { graphVersionStatus } from "../setup/graphVersions.ts";
@@ -16,6 +16,7 @@ import { stepsFor, type SetupContext, type StepId } from "../setup/steps.ts";
 import { projectPaths, type Out } from "./check.ts";
 import { buildContext, type SetupDeps } from "./setup.ts";
 import { SecretError } from "./secrets.ts";
+import { LOGIN_LABEL } from "./token.ts";
 
 export type Level = "ok" | "warn" | "fail";
 export type Check = { id: string; level: Level; detail: string; fix?: string };
@@ -29,6 +30,8 @@ export type DoctorDeps = SetupDeps & {
 
 const DAY = 86_400_000;
 const MIN_TOKEN_DAYS = 7;
+/** A Unified login token is never renewed, so a dated one is flagged two weeks ahead. */
+const UNIFIED_WARN_DAYS = 14;
 const OPENROUTER_KEY_URL = "https://openrouter.ai/api/v1/key";
 const SHA = /^[0-9a-f]{40}$/;
 const setupFix = (id: string) => `npx weekpost setup --apply --only=${id}`;
@@ -97,7 +100,6 @@ async function tokenChecks(ctx: SetupContext, deps: DoctorDeps, now: Date): Prom
   } catch {
     return ctx.accounts.map((a) => ({ id: `token.${a.id}`, level: "warn" as const, detail: "could not read weekpost_tokens" }));
   }
-  const graph = new InstagramGraph(ctx.fetch);
   for (const a of ctx.accounts) {
     const id = `token.${a.id}`;
     const fix = `npx weekpost token ${a.id}`;
@@ -106,35 +108,62 @@ async function tokenChecks(ctx: SetupContext, deps: DoctorDeps, now: Date): Prom
       out.push({ id, level: "fail", detail: `no token saved for @${a.handle}`, fix });
       continue;
     }
+    const login = row.login ?? "instagram";
+    // Informative only: which API the saved token belongs to (`weekpost token` found out and recorded it).
+    out.push({ id: `${id}.login`, level: "ok", detail: LOGIN_LABEL[login] });
+    const graph = new InstagramGraph(ctx.fetch, GRAPH_API_VERSION, login);
     const secret = row.accessToken;
     const safe = (e: unknown) => redact(String((e as Error)?.message ?? e), secret).slice(0, 200);
     const days = row.expiresAt === null ? Infinity : Math.floor((Date.parse(row.expiresAt) - now.getTime()) / DAY);
-    let me: { userId: string; username: string };
-    try {
-      me = await graph.me(secret);
-    } catch (e) {
-      out.push({ id, level: "fail", detail: `Instagram did not accept the saved token: ${safe(e)}`, fix });
-      continue;
-    }
-    if (me.username.toLowerCase() !== a.handle.toLowerCase()) {
-      out.push({ id, level: "fail", detail: `the saved token belongs to @${me.username}, not @${a.handle}`, fix });
+    const owner = await tokenOwner(graph, secret, row.igUserId, a.handle).catch((e: unknown) => ({ error: `Instagram did not accept the saved token: ${safe(e)}` }));
+    if ("error" in owner) {
+      out.push({ id, level: "fail", detail: owner.error, fix });
       continue;
     }
     try {
-      await graph.publishingLimit(me.userId, secret);
+      await graph.publishingLimit(owner.userId, secret);
     } catch (e) {
       out.push({ id, level: "fail", detail: e instanceof GraphError ? `the token cannot publish: ${safe(e)}` : "could not check publishing permission", fix });
       continue;
     }
-    if (!(days > MIN_TOKEN_DAYS)) {
+    if (days < 0 || (login === "instagram" && !(days > MIN_TOKEN_DAYS))) {
       out.push({ id, level: "fail", detail: days < 0 ? "the saved token has expired" : `the saved token expires in ${days} day(s)`, fix });
       continue;
     }
-    out.push({ id, level: "ok", detail: `@${a.handle}: token works, can publish, ${Number.isFinite(days) ? `${days} days left` : "no expiry"}` });
+    const left = Number.isFinite(days) ? `${days} days left` : "does not expire";
+    if (login === "unified" && days <= UNIFIED_WARN_DAYS) {
+      // weekpost cannot renew a Unified login token: it only stops working, so the warning comes early.
+      out.push({ id, level: "warn", detail: `@${a.handle}: token works, can publish, ${days} day(s) left; it was generated with a 60-day expiry, which weekpost cannot renew. Regenerate it with the expiry set to never`, fix });
+    } else {
+      out.push({ id, level: "ok", detail: `@${a.handle}: token works, can publish, ${left}` });
+    }
     // A warning, never a failure: publishing works without the Insights permission.
-    if ((await insightsAccess(graph, me.userId, secret, now)) === "missing") out.push({ id: `${id}.insights`, level: "warn", detail: "the token cannot read Insights; `weekpost metrics` needs `instagram_business_manage_insights` (posts still publish)", fix: `generate the token again with all three permissions (setup step 4, item 5), then: ${fix}` });
+    if ((await insightsAccess(graph, owner.userId, secret, now)) === "missing") out.push(insightsWarning(id, login, fix));
   }
   return out;
+}
+
+/**
+ * The account the saved token acts on, checked against the config. Instagram Login: `/me`. Unified login: `/me` is the
+ * system user, so the saved `ig_user_id` must be among the token's assigned accounts, with the configured handle.
+ */
+async function tokenOwner(graph: InstagramGraph, secret: string, igUserId: string, handle: string): Promise<{ userId: string } | { error: string }> {
+  if (graph.loginMode === "instagram") {
+    const me = await graph.me(secret);
+    return me.username.toLowerCase() === handle.toLowerCase() ? { userId: me.userId } : { error: `the saved token belongs to @${me.username}, not @${handle}` };
+  }
+  const accounts = await graph.assignedAccounts(secret);
+  const saved = accounts.find((x) => x.id === igUserId);
+  if (!saved) return { error: `the saved token no longer has access to the saved Instagram account ${igUserId} (@${handle})` };
+  if (saved.username.toLowerCase() !== handle.toLowerCase()) return { error: `the saved Instagram account ${igUserId} is @${saved.username}, not @${handle}` };
+  return { userId: igUserId };
+}
+
+function insightsWarning(id: string, login: LoginMode, fix: string): Check {
+  const detail = `the token cannot read Insights; \`weekpost metrics\` needs \`${INSIGHTS_PERMISSION[login]}\` (posts still publish)`;
+  return login === "unified"
+    ? { id: `${id}.insights`, level: "warn", detail, fix: `add ${INSIGHTS_PERMISSION.unified} to the Unified login configuration, generate the token again, then: ${fix}` }
+    : { id: `${id}.insights`, level: "warn", detail, fix: `generate the token again with all three permissions (setup step 4, item 5), then: ${fix}` };
 }
 
 /** Workflow `uses:` lines that name a tag or branch instead of a full commit SHA. */
