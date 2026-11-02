@@ -281,7 +281,7 @@ describe("weekpost doctor", () => {
     const c = find(r.checks, "token.en.insights");
     expect(c.level).toBe("warn");
     expect(c.detail).toBe("the token cannot read Insights; `weekpost metrics` needs `instagram_business_manage_insights` (posts still publish)");
-    expect(c.fix).toBe("generate the token again with all three permissions (setup step 4, item 5), then: npx weekpost token en");
+    expect(c.fix).toBe("generate the token again with all three permissions (docs/setup.md, step 4, \"Older apps\"), then: npx weekpost token en");
     expect(find(r.checks, "token.en").level).toBe("ok");
     expect(r.code).toBe(0);
   });

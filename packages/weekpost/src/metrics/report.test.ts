@@ -92,10 +92,22 @@ describe("Attention, one item at a time", () => {
     expect(attention({ tokens: [{ account: "en", expiresAt: "2026-11-20T00:00:00Z" }] })).toEqual([]);
     expect(attention({ tokens: [{ account: "en", expiresAt: "2026-11-15T00:00:00Z" }] })[0]).toContain("npx weekpost token en");
   });
+  it("a token without an expiry (Unified login) never gets an expiry line", () => {
+    expect(attention({ tokens: [{ account: "en", expiresAt: null }] })).toEqual([]);
+    expect(buildReport(base({ tokens: [{ account: "en", expiresAt: null }] }))).not.toMatch(/Token of|expires in|has expired/);
+  });
   it("token without the Insights permission", () => {
     const l = attention({ collected: { rows: [], accounts: ["en"], posts: [], issues: [issue("no-permission")] } })[0]!;
     expect(l).toContain("API setup with Instagram login");
     expect(l).toContain("all three permissions");
+    expect(l).toContain("npx weekpost token en");
+  });
+  it("token without the Insights permission, Unified login: the fix names that setup and its permission", () => {
+    const l = attention({ collected: { rows: [], accounts: ["en"], posts: [], issues: [issue("no-permission", { login: "unified" })] } })[0]!;
+    expect(l).toContain("API setup with Unified login");
+    expect(l).toContain("instagram_manage_insights");
+    expect(l).not.toContain("API setup with Instagram login");
+    expect(l).not.toContain("instagram_business_");
     expect(l).toContain("npx weekpost token en");
   });
   it("token rejected by Meta and account without a token", () => {

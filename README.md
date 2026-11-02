@@ -158,7 +158,7 @@ No. Any agent that reads `AGENTS.md` and skills can draft the week, and you can 
 It is told not to add the preview label, merge or touch the queue, and four barriers keep a cooperative agent in line. They reduce accidents and are not a security boundary: an agent under prompt injection that runs as your user can get around them. Run it in a sandbox and protect `main` with a required review. Read [docs/security.md](docs/security.md) before you rely on it.
 
 **Does it work with other networks?**
-Not yet. Instagram only, through Instagram Login.
+Not yet. Instagram only, through Meta's Instagram API (Unified login for new apps, Instagram login for older ones).
 
 **Does it publish Stories?**
 No. weekpost queues them as `manual`, and `package` gives you the files and caption to post by hand.

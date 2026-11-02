@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { InstagramGraph } from "../publisher/instagram.ts";
-import type { MetricsDb, QueueRow, Token } from "../queue/types.ts";
-import { ACCOUNT_METRICS, collectMetrics, FEED_METRICS, NEVER_REQUEST, REEL_METRICS } from "./collect.ts";
+import type { LoginMode, MetricsDb, QueueRow, Token } from "../queue/types.ts";
+import { ACCOUNT_METRICS, collectMetrics, FEED_METRICS, NEVER_REQUEST, REEL_METRICS, UNIFIED_ACCOUNT_METRICS } from "./collect.ts";
 
 const TOKEN = "IGAAtoken-secret-1234567890abcdef";
 const NOW = new Date("2026-10-30T08:17:00Z");
@@ -25,15 +25,15 @@ const token = (account = "en", igUserId = "9001"): Token => ({ account, igUserId
 
 type Reply = { body: unknown; status?: number };
 function world(opts: { posts: QueueRow[]; tokens?: Token[]; reply: (path: string, params: URLSearchParams) => Reply }) {
-  const calls: { path: string; params: URLSearchParams; auth: string | null }[] = [];
+  const calls: { host: string; path: string; params: URLSearchParams; auth: string | null }[] = [];
   const fetchFn = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(String(input));
-    calls.push({ path: url.pathname, params: url.searchParams, auth: new Headers(init?.headers).get("authorization") });
+    calls.push({ host: url.host, path: url.pathname, params: url.searchParams, auth: new Headers(init?.headers).get("authorization") });
     const r = opts.reply(url.pathname, url.searchParams);
     return new Response(JSON.stringify(r.body), { status: r.status ?? 200 });
   }) as typeof fetch;
   const db: Pick<MetricsDb, "tokens" | "publishedSince"> = { tokens: async () => opts.tokens ?? [token()], publishedSince: async () => opts.posts };
-  return { calls, deps: { db, graph: new InstagramGraph(fetchFn), now: NOW } };
+  return { calls, deps: { db, graph: (login: LoginMode) => new InstagramGraph(fetchFn, undefined, login), now: NOW } };
 }
 
 const happy = (path: string, p: URLSearchParams): Reply => {
@@ -150,5 +150,41 @@ describe("collectMetrics", () => {
     const out = await collectMetrics(w.deps);
     expect(out.issues).toMatchObject([{ account: "en", kind: "rate-limit" }]);
     expect(out.rows.filter((r) => r.account === "pt").map((r) => r.metric)).toEqual(["reach", "followers_count"]);
+  });
+
+  it("reads a Unified login account on graph.facebook.com, without the account metrics that host does not list", async () => {
+    const unified: Token = { ...token("pt", "9002"), login: "unified", expiresAt: null };
+    const w = world({
+      posts: [row({ account: "pt", mediaId: "m-fake-3" })],
+      tokens: [token("en", "9001"), unified],
+      reply: (path, p) => (path.endsWith("/9002/insights") ? { body: totals({ reach: 5, views: 8, total_interactions: 1, profile_links_taps: 0 }) } : path.endsWith("/9002") ? { body: { followers_count: 3 } } : happy(path, p)),
+    });
+    const out = await collectMetrics(w.deps);
+    expect(out.issues).toEqual([]);
+    const en = w.calls.filter((c) => c.path.includes("/9001"));
+    const pt = w.calls.filter((c) => c.path.includes("/9002") || c.path.includes("m-fake-3"));
+    expect(en.length).toBeGreaterThan(0);
+    expect(en.every((c) => c.host === "graph.instagram.com")).toBe(true);
+    expect(pt).toHaveLength(3);
+    expect(pt.every((c) => c.host === "graph.facebook.com" && c.auth === `Bearer ${TOKEN}`)).toBe(true);
+    expect(w.calls.find((c) => c.path.endsWith("/9001/insights"))!.params.get("metric")).toBe(ACCOUNT_METRICS.join(","));
+    expect(w.calls.find((c) => c.path.endsWith("/9002/insights"))!.params.get("metric")).toBe(UNIFIED_ACCOUNT_METRICS.join(","));
+    expect(UNIFIED_ACCOUNT_METRICS).not.toContain("profile_views");
+    expect(UNIFIED_ACCOUNT_METRICS).not.toContain("website_clicks");
+    expect(out.rows.filter((r) => r.account === "pt" && r.scope === "account").map((r) => r.metric)).toEqual(["reach", "views", "total_interactions", "profile_links_taps", "followers_count"]);
+    expect(out.rows.some((r) => r.account === "pt" && r.scope === "post")).toBe(true);
+  });
+
+  it("tags an issue with the login mode of the account's token", async () => {
+    const w = world({ posts: [], tokens: [{ ...token(), login: "unified", expiresAt: null }], reply: () => error("(#10) Application does not have permission for this action", 10) });
+    const out = await collectMetrics(w.deps);
+    expect(out.issues).toMatchObject([{ account: "en", kind: "no-permission", login: "unified" }]);
+  });
+
+  it("a token row without a login mode is read as Instagram Login", async () => {
+    const w = world({ posts: [], reply: () => error("(#10) Application does not have permission for this action", 10) });
+    const out = await collectMetrics(w.deps);
+    expect(out.issues[0]!.login).toBe("instagram");
+    expect(w.calls.every((c) => c.host === "graph.instagram.com")).toBe(true);
   });
 });

@@ -53,8 +53,8 @@ export const firstPostId = (localDate: string) => `${localDate}-weekpost-first-p
 export function explainFailure(lastError: string | null, account: string): string {
   const e = lastError ?? "";
   if (/no Instagram token/i.test(e)) return `the Worker has no token for "${account}". Run: weekpost token ${account} (docs/setup.md, step 6), then run first-post again tomorrow or restore the post.`;
-  if (/#190|OAuth|expired|invalid.*token/i.test(e)) return `Instagram refused the token. Generate a new long-lived token and run: weekpost token ${account} (docs/setup.md, step 6).`;
-  if (/#10\b|#200|permission/i.test(e)) return `the token cannot publish. Generate it again with the instagram_business_content_publish permission and run: weekpost token ${account} (docs/setup.md, step 6).`;
+  if (/#190|OAuth|expired|invalid.*token/i.test(e)) return `Instagram refused the token. Generate a new token in Meta's app dashboard and run: weekpost token ${account} (docs/setup.md, step 6).`;
+  if (/#10\b|#200|permission/i.test(e)) return `the token cannot publish. Generate it again with the publishing permission (instagram_content_publish on the Unified login, instagram_business_content_publish on the Instagram login) and run: weekpost token ${account} (docs/setup.md, step 6).`;
   if (/container|image|JPEG|media/i.test(e)) return `Instagram rejected the image (${e.slice(0, 160)}). Check that the account is a professional account (docs/setup.md, step 1) and try again.`;
   if (/Supabase|storage|signed/i.test(e)) return `the Worker could not read the media or the database (${e.slice(0, 160)}). Check the Worker secrets WEEKPOST_SUPABASE_URL and WEEKPOST_SUPABASE_KEY (docs/setup.md, step 5).`;
   if (!e) return "no reason was recorded. Open the Worker logs and filter by ERROR (docs/operate.md, \"Reading the Worker logs\").";

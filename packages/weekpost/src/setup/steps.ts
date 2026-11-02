@@ -95,7 +95,7 @@ export function stepsFor(ctx: Pick<SetupContext, "accounts" | "previewLabel" | "
       id: `token.${a.id}`,
       title: `Instagram token for @${a.handle}`,
       commands: [`npx weekpost token ${a.id}`],
-      guide: `generate a long-lived token in the Meta app panel, copy it, then run: npx weekpost token ${a.id}`,
+      guide: `generate the token in the Meta app dashboard (docs/setup.md, step 4), copy it, then run: npx weekpost token ${a.id}`,
     });
   }
   return steps;

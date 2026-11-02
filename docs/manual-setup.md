@@ -26,6 +26,15 @@ This is the same setup as [Set it up](setup.md), done by hand. `npx weekpost set
    ```
 
    Run it in the SQL editor and never commit the token. The Worker renews it when fewer than 30 days are left and logs `ERROR_token_expiring` when fewer than 7 are left.
+
+   That is a token from the older "API setup with Instagram login". For a token from "API setup with Unified login" (the only one new Meta apps offer, see [Set it up](setup.md#4-create-the-accounts)), the account id is the `id` that `GET https://graph.facebook.com/v26.0/me/assigned_instagram_accounts?fields=id,username` returns for your handle, and the row has no expiry and is never renewed:
+
+   ```sql
+   insert into public.weekpost_tokens (account, ig_user_id, access_token, expires_at, login)
+   values ('en', '<numeric account id>', '<system-user token>', null, 'unified');
+   ```
+
+   `npx weekpost token <account>` does all of this for you, for either kind of token.
 5. **Worker.** In `worker/`, set the two secrets and deploy it yourself:
 
    ```sh

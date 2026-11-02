@@ -9,7 +9,7 @@ Day-to-day use: the workflows, the queue commands, topic sources and the Worker 
 | `weekpost-check` | every pull request that touches `content/` or the config | none |
 | `weekpost-preview` | label `media-ok` on a pull request from a branch of the same repository, and again on every push while the label stays | `OPENROUTER_API_KEY` |
 | `weekpost-enqueue` | push to `main` that touches a week folder, or manually with a pull request number (the job refuses any ref other than `main`) | `WEEKPOST_SUPABASE_URL`, `WEEKPOST_SUPABASE_KEY` (environment `weekpost`) |
-| `weekpost-metrics` | every Monday at 08:00 UTC, or manually (the job refuses any ref other than `main`) | `WEEKPOST_SUPABASE_URL`, `WEEKPOST_SUPABASE_KEY` (environment `weekpost`); optional `WEEKPOST_METRICS_EXTRA_ENV` for your own extra numbers. The token needs `instagram_business_manage_insights`; without it the issue says so instead of failing |
+| `weekpost-metrics` | every Monday at 08:00 UTC, or manually (the job refuses any ref other than `main`) | `WEEKPOST_SUPABASE_URL`, `WEEKPOST_SUPABASE_KEY` (environment `weekpost`); optional `WEEKPOST_METRICS_EXTRA_ENV` for your own extra numbers. The token needs `instagram_manage_insights` (Unified login) or `instagram_business_manage_insights` (older apps); without it the issue says so instead of failing |
 
 Set up before `weekpost-metrics` existed? Copy `.github/workflows/weekpost-metrics.yml` from the weekpost template (`node_modules/weekpost/template/.github/workflows/weekpost-metrics.yml`) into your repo, then run `gh label create metrics` (or `npx weekpost setup --apply --only=github.label`). `doctor` warns while the file is missing.
 
@@ -45,7 +45,7 @@ npx weekpost metrics                     # read Instagram Insights and print the
 - `--write` stores the numbers in `weekpost_metrics`.
 - `--issue` creates or rewrites one GitHub issue per week, titled `weekpost metrics: <YYYY-Www>` (label `metrics`). It needs the repository and a token that may write issues: from `GITHUB_REPOSITORY` and `GITHUB_TOKEN`, or `--repo=<owner/name>`. To run it yourself: `GITHUB_TOKEN=$(gh auth token) npx weekpost metrics --issue --repo=<owner/name>`.
 - The `weekpost-metrics` Action runs `metrics --write --issue` every week, so you do not need to. You can still run it by hand from a terminal (your agent cannot: Claude Code blocks it and Codex asks first). To trigger the Action now: `gh workflow run weekpost-metrics`.
-- Missing data never fails the run: it becomes an Attention line. Reading Insights needs the `instagram_business_manage_insights` permission on the token.
+- Missing data never fails the run: it becomes an Attention line. Reading Insights needs the Insights permission on the token: `instagram_manage_insights` (Unified login) or `instagram_business_manage_insights` (older apps). On a Unified login token the report has no profile views or link taps.
 
 #### Extra numbers from your own code
 

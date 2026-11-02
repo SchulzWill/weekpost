@@ -163,7 +163,7 @@ function insightsWarning(id: string, login: LoginMode, fix: string): Check {
   const detail = `the token cannot read Insights; \`weekpost metrics\` needs \`${INSIGHTS_PERMISSION[login]}\` (posts still publish)`;
   return login === "unified"
     ? { id: `${id}.insights`, level: "warn", detail, fix: `add ${INSIGHTS_PERMISSION.unified} to the Unified login configuration, generate the token again, then: ${fix}` }
-    : { id: `${id}.insights`, level: "warn", detail, fix: `generate the token again with all three permissions (setup step 4, item 5), then: ${fix}` };
+    : { id: `${id}.insights`, level: "warn", detail, fix: `generate the token again with all three permissions (docs/setup.md, step 4, "Older apps"), then: ${fix}` };
 }
 
 /** Workflow `uses:` lines that name a tag or branch instead of a full commit SHA. */

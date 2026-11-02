@@ -22,8 +22,12 @@ export async function insightsAccess(graph: Pick<InstagramGraph, "accountInsight
 /** The Insights permission each login mode asks for. */
 export const INSIGHTS_PERMISSION: Record<LoginMode, string> = { instagram: "instagram_business_manage_insights", unified: "instagram_manage_insights" };
 
+/** What to do about a token that cannot read Insights, for its login mode. */
+export const insightsFix = (account: string, login: LoginMode = "instagram") =>
+  login === "unified"
+    ? `In Meta's "API setup with Unified login", edit the configuration's permissions to add ${INSIGHTS_PERMISSION.unified}, generate the token again, then run \`npx weekpost token ${account}\`.`
+    : `Generate it again in Meta's "API setup with Instagram login" with all three permissions (docs/setup.md, step 4, "Older apps"), then run \`npx weekpost token ${account}\`.`;
+
 /** The warning for a token that cannot read Insights. Publishing works without the permission, so it is never an error. */
 export const noInsightsMessage = (account: string, login: LoginMode = "instagram") =>
-  login === "unified"
-    ? `the token for \`${account}\` cannot read Insights, so \`weekpost metrics\` will have no numbers (posts still publish). In Meta's "API setup with Unified login", edit the configuration's permissions to add ${INSIGHTS_PERMISSION.unified}, generate the token again, then run \`npx weekpost token ${account}\`.`
-    : `the token for \`${account}\` cannot read Insights, so \`weekpost metrics\` will have no numbers (posts still publish). Generate it again in Meta's "API setup with Instagram login" with all three permissions (setup step 4, item 5), then run \`npx weekpost token ${account}\`.`;
+  `the token for \`${account}\` cannot read Insights, so \`weekpost metrics\` will have no numbers (posts still publish). ${insightsFix(account, login)}`;

@@ -44,11 +44,15 @@ Direct links open the dashboard home or the official docs. Do not describe deepe
 **OpenRouter** ([keys](https://openrouter.ai/settings/keys))
 - Create a key with a credit limit. It goes in the hidden prompt of `setup --apply --only=github.secrets`.
 
-**Meta app with Instagram Login** ([apps](https://developers.facebook.com/apps), [docs](https://developers.facebook.com/docs/instagram-platform/instagram-api-with-instagram-login))
-- Needs a professional (Business or Creator) Instagram account they own, and a public page for a privacy policy.
-- Create an app whose use case manages content on Instagram ("Instagram API with Instagram Login"), set the Privacy Policy URL, add the Instagram account as a tester and accept the invitation in the Instagram app.
-- Generate the token for that account with `instagram_business_basic`, `instagram_business_content_publish` and `instagram_business_manage_insights` (the last is only for `weekpost metrics`), and copy it. Leave the app in development mode.
-- Then the person runs `npx weekpost token <account>` (the account id from `weekpost.config.ts`), one account at a time. It reads the clipboard; `--prompt` uses a hidden prompt.
+**Meta app** ([apps](https://developers.facebook.com/apps), [business portfolios](https://business.facebook.com), [docs](https://developers.facebook.com/docs/instagram-platform/instagram-api-with-unified-login/get-started))
+- Needs a professional (Business or Creator) Instagram account they own, a public page for a privacy policy, and a business portfolio. New apps offer only "API setup with Unified login"; creating a portfolio adds about 15 minutes.
+- Business portfolio: create one (or use theirs) and add the Instagram account to it (Accounts, Instagram accounts).
+- Create an app with the use case "Manage messaging & content on Instagram"; in that use case's Customize page, connect the business portfolio (the Unified login section appears only then). Set the Privacy Policy URL.
+- Configure your app, Create new configuration: keep "System-user access token" and "Token will never expire"; edit the permissions down to `instagram_basic`, `instagram_content_publish` and `instagram_manage_insights` (the last is not in Meta's template; it is only for `weekpost metrics`). No ad account, no `ads_*`, no `instagram_manage_comments`.
+- App roles, Add People, Instagram Tester; the person accepts on Instagram (profile settings, Website permissions, Apps and websites, Tester invites). The account must be public.
+- Generate access tokens, Add account, Generate token, picking the portfolio and the account. Meta shows the token once: copy it right away. Leave the app in development mode; Webhooks and App Review are not needed.
+- Older apps that still show "API setup with Instagram login": add the account as a tester there and generate the token with `instagram_business_basic`, `instagram_business_content_publish` and `instagram_business_manage_insights` (60 days, the Worker renews it).
+- Then the person runs `npx weekpost token <account>` (the account id from `weekpost.config.ts`), one account at a time. It reads the clipboard; `--prompt` uses a hidden prompt. It detects which login the token is from; for a Unified login token it asks how long it lasts: the answer is `never`.
 
 The weekpost repository (https://github.com/SchulzWill/weekpost) has the full steps in `docs/setup.md` and the error table in `docs/troubleshooting.md`.
 
@@ -77,7 +81,7 @@ The `fix` field of each failing check already holds the command. Use this table 
 | `secrets.local` | local secrets file missing | `npx weekpost setup --apply --only=local.secrets` |
 | `github.label` | label missing, or `origin` is not on GitHub | push to GitHub, then `npx weekpost setup --apply --only=github.label` |
 | `github.workflows` | an action is pinned to a tag, not a commit SHA | replace each tag with the full commit SHA |
-| `token.<account>` | no token, rejected, wrong handle, cannot publish, or expiring | new token with all three permissions, then `npx weekpost token <account>` |
+| `token.<account>` | no token, rejected, wrong handle, cannot publish, or expiring | new token with the three permissions of its login (Unified login: `instagram_basic`, `instagram_content_publish`, `instagram_manage_insights`; expiry never), then `npx weekpost token <account>` |
 | `graph.version` | Graph API version near its end | update weekpost |
 
 A `warn` is not a blocker: say what it means and go on.

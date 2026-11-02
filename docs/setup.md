@@ -2,7 +2,7 @@
 
 The guided setup, from an empty folder to a first public post. Back to the [README](../README.md).
 
-This is the guided path. If your agent is Claude Code or Codex, you can ask it to run the `setup-guide` skill instead. A first-timer who follows it in order should finish in about three hours, most of it creating accounts. Every command below is a `weekpost` subcommand; `npx weekpost` alone prints the list of commands and their options.
+This is the guided path. If your agent is Claude Code or Codex, you can ask it to run the `setup-guide` skill instead. A first-timer who follows it in order should finish in about three hours, most of it creating accounts (allow extra time if you have no Meta business portfolio yet). Every command below is a `weekpost` subcommand; `npx weekpost` alone prints the list of commands and their options.
 
 ### 1. Before you start
 
@@ -75,18 +75,25 @@ You create three accounts. Keep each value at hand; step 5 asks for them at hidd
 1. Create a free account. Nothing else to configure in the dashboard: `setup` deploys the Worker with `wrangler`.
 2. Run `npx wrangler@4 login` and approve in the browser.
 
-**Meta app with Instagram Login** ([developers.facebook.com](https://developers.facebook.com))
+**Meta app** ([developers.facebook.com](https://developers.facebook.com))
+
+New Meta apps offer only "API setup with Unified login", so that is the path below. It needs a business portfolio, but no Facebook Page.
 
 1. Log in with a Facebook account and register as a developer if asked.
-2. My Apps, Create app. Pick the use case that manages content and messaging on Instagram (it uses "Instagram API with Instagram Login"), and give the app a name of your own.
-3. In the app's basic settings, set the **Privacy Policy URL**. Meta requires a public URL, not a file. `init` wrote a generic one-page policy to `PRIVACY.md` with your brand name filled in: read it, change it to match what you do (fill in `<CONTACT>` if `init` did not have one), publish it on any public web page (your site, a GitHub Pages page) and paste that address here.
-4. In the Instagram product, open "API setup with Instagram login". Add your Instagram professional account to the app (an Instagram tester role): accept the invitation in the Instagram app, under the website permissions of the account's settings.
-5. In the same panel, generate the token for that account with the permissions `instagram_business_basic`, `instagram_business_content_publish` and `instagram_business_manage_insights` (the last one lets `weekpost metrics` read your numbers; publishing works without it). Copy it and keep it for step 6. It is long-lived (about 60 days); the Worker renews it.
-6. Leave the app in development mode. You do not need App Review or Business Verification to publish on your own account.
+2. **Business portfolio.** At [business.facebook.com](https://business.facebook.com), create a business portfolio (or use one you already manage) and add your Instagram professional account to it, under the portfolio's settings, Accounts, Instagram accounts.
+3. **App.** My Apps, Create app, with the use case **Manage messaging & content on Instagram** and a name of your own. In Use cases, open that use case's **Customize** page and connect the app to the business portfolio from item 2. The "API setup with Unified login" section appears only after that.
+4. **Privacy policy.** In the app's basic settings, set the **Privacy Policy URL**. Meta requires a public URL, not a file. `init` wrote a generic one-page policy to `PRIVACY.md` with your brand name filled in: read it, change it to match what you do (fill in `<CONTACT>` if `init` did not have one), publish it on any public web page (your site, a GitHub Pages page) and paste that address here.
+5. **Configuration.** In "API setup with Unified login", open **Configure your app**, **Create new configuration**. Keep the token type **System-user access token** and the expiry **Token will never expire** (weekpost cannot renew this token). Pick your Instagram account as the asset and skip the ad account. Then **edit the permissions** so only these three remain: `instagram_basic`, `instagram_content_publish` and `instagram_manage_insights`. The last one is not in Meta's template: add it, it lets `weekpost metrics` read your numbers. Remove the others (`ads_management`, `ads_read`, `instagram_manage_comments`, and `instagram_manage_messages` if the dashboard lets you). Save. weekpost does not use the login URL, so the Redirect URL field does not matter for it.
+6. **Tester.** In App roles, Add People, add your Instagram account as an **Instagram Tester** (by its @). Accept the invitation on Instagram: profile settings, Website permissions, Apps and websites, Tester invites. The account must be public.
+7. **Token.** In **Generate access tokens**, Add account, then **Generate token**. Log in to Instagram and pick the business portfolio and the account from item 2. Copy the token right away: Meta shows it only once. Keep it for step 6.
+8. Leave the app in development mode. You do not need Webhooks, App Review or Business Verification to publish on your own account.
+
+**Older apps.** If your app still shows "API setup with Instagram login", that path keeps working: add the account as an Instagram tester there, generate the token with `instagram_business_basic`, `instagram_business_content_publish` and `instagram_business_manage_insights`, and go to step 6. That token lasts 60 days and the Worker renews it; it needs no business portfolio.
 
 What Meta requires of you (checked against Meta's pages on 30 October 2026; read the originals, [Platform Terms](https://developers.facebook.com/terms/) and [Developer Policies](https://developers.facebook.com/devpolicy/)):
 
 - **Your app, your account.** Each person creates their own Meta app and is its developer. Use it only on professional accounts you own or manage. Meta's own table lists "my app is only for a business I own or manage" as needing Standard Access only. Do not use one app for clients or third parties, do not host weekpost for other people, and do not create a new app to get around a block.
+- **A business portfolio** that owns the app and the Instagram account, for "API setup with Unified login" ([Meta's guide](https://developers.facebook.com/docs/instagram-platform/instagram-api-with-unified-login/get-started)).
 - **A privacy policy** on a public URL, registered in the app. The Platform Terms ask for one from every developer.
 - **50 posts per 24 hours.** The API docs say 50 (one page also says 100); weekpost plans with 50. A carousel counts as one post.
 - **Label AI content.** Meta requires its disclosure label on photorealistic video or realistic synthetic audio. weekpost cannot set that label through the API: add it in the Instagram app after publishing, or avoid that kind of audio.
@@ -113,7 +120,7 @@ At a terminal, it asks before each step. It will prompt, hidden, for the Supabas
 npx weekpost token <account>
 ```
 
-`<account>` is the account id from `weekpost.config.ts` (for example `en`). Copy the token from the Meta panel and run the command: it reads the clipboard, or use `--prompt` to paste it at a hidden prompt. It checks with Instagram that the token belongs to the handle in the config and can publish, saves it in your database, and clears the clipboard. It needs a terminal. Do one account at a time.
+`<account>` is the account id from `weekpost.config.ts` (for example `en`). Copy the token from the Meta dashboard and run the command: it reads the clipboard, or use `--prompt` to paste it at a hidden prompt. It finds out by itself whether the token is from the Unified login or the older Instagram login, checks with Instagram that it can see the handle in the config and can publish, saves it in your database, and clears the clipboard. For a Unified login token it asks how long the token lasts: answer `never` (the default), as set in item 5. It needs a terminal. Do one account at a time.
 
 ### 7. Check everything
 

@@ -6,14 +6,24 @@
 //   https://developers.facebook.com/docs/instagram-platform/reference/instagram-media/insights
 //   https://developers.facebook.com/docs/instagram-platform/api-reference/instagram-user/insights
 import { GraphError, type InstagramGraph } from "../publisher/instagram.ts";
-import type { MetricRow, MetricsDb, PostType, QueueRow, Token } from "../queue/types.ts";
+import type { LoginMode, MetricRow, MetricsDb, PostType, QueueRow, Token } from "../queue/types.ts";
 
 /** Reels. `ig_reels_avg_watch_time` is in milliseconds. */
 export const REEL_METRICS = ["reach", "views", "saved", "shares", "total_interactions", "likes", "comments", "ig_reels_avg_watch_time", "ig_reels_video_view_total_time"];
 /** Carousels (the FEED product type). */
 export const FEED_METRICS = ["reach", "views", "saved", "shares", "total_interactions", "likes", "comments", "profile_visits", "follows"];
-/** Account totals over the window. `website_clicks` is the tap on the link of the profile. */
+/** Account totals over the window (Instagram Login). `website_clicks` is the tap on the link of the profile. */
 export const ACCOUNT_METRICS = ["reach", "views", "total_interactions", "profile_links_taps", "profile_views", "website_clicks"];
+/**
+ * Account totals on the Unified login (graph.facebook.com). `profile_views` and `website_clicks` are left out: Meta's
+ * account Insights table for that host does not list them, and one metric Meta does not know fails the whole request,
+ * which would leave the account block empty. Add them back once a real Unified login token proves they are accepted.
+ */
+export const UNIFIED_ACCOUNT_METRICS = ["reach", "views", "total_interactions", "profile_links_taps"];
+
+export function accountMetricsFor(login: LoginMode): string[] {
+  return login === "unified" ? UNIFIED_ACCOUNT_METRICS : ACCOUNT_METRICS;
+}
 
 /**
  * Never requested: Meta removed them (`impressions`, `plays`, `clips_replays_count`, `ig_reels_aggregated_all_plays_count`,
@@ -27,7 +37,7 @@ export const ACCOUNT_WINDOW_DAYS = 7;
 
 export type IssueKind =
   | "no-token" // the account has no token row
-  | "no-permission" // the token lacks instagram_business_manage_insights
+  | "no-permission" // the token lacks the Insights permission of its login mode
   | "token" // Meta rejected the token (expired or revoked)
   | "rate-limit" // Meta answered 80002 (or the app-level limit)
   | "no-media-id" // published but the queue holds no media id
@@ -41,6 +51,8 @@ export interface CollectIssue {
   kind: IssueKind;
   /** Already free of the token; the report cleans it again before printing. */
   detail: string;
+  /** Login mode of the account's token, when it has one: the fix for a permission problem depends on it. */
+  login?: LoginMode;
 }
 
 export interface Collected {
@@ -69,14 +81,17 @@ export function classify(e: unknown): { kind: IssueKind; fatal: boolean; detail:
   return { kind: "error", fatal: false, detail };
 }
 
+export type InsightsGraph = Pick<InstagramGraph, "mediaInsights" | "accountInsights" | "followersCount">;
+
 export interface CollectDeps {
   db: Pick<MetricsDb, "tokens" | "publishedSince">;
-  graph: Pick<InstagramGraph, "mediaInsights" | "accountInsights" | "followersCount">;
+  /** The Graph client for a login mode: each account is read through the API its token belongs to. */
+  graph: (login: LoginMode) => InsightsGraph;
   now: Date;
 }
 
 export async function collectMetrics(deps: CollectDeps): Promise<Collected> {
-  const { db, graph, now } = deps;
+  const { db, now } = deps;
   const day = now.toISOString().slice(0, 10);
   const tokens = new Map<string, Token>((await db.tokens()).map((t) => [t.account, t]));
   const posts = (await db.publishedSince(new Date(now.getTime() - POST_WINDOW_DAYS * DAY).toISOString())).filter((p) => p.type !== "story");
@@ -91,7 +106,9 @@ export async function collectMetrics(deps: CollectDeps): Promise<Collected> {
       issues.push({ account, postId: "", kind: "no-token", detail: `no token saved for "${account}"` });
       continue;
     }
-    const issue = (postId: string, kind: IssueKind, detail: string) => issues.push({ account, postId, kind, detail });
+    const login = token.login ?? "instagram";
+    const graph = deps.graph(login);
+    const issue = (postId: string, kind: IssueKind, detail: string) => issues.push({ account, postId, kind, detail, login });
     const add = (scope: MetricRow["scope"], postId: string, values: Record<string, number>) => {
       for (const [metric, value] of Object.entries(values)) if (value >= 0) rows.push({ scope, postId, account, collectedOn: day, metric, value: Math.trunc(value) });
     };
@@ -101,7 +118,7 @@ export async function collectMetrics(deps: CollectDeps): Promise<Collected> {
     try {
       const until = Math.floor(now.getTime() / 1000);
       const totals = await graph.accountInsights(token.igUserId, token.accessToken, {
-        metrics: ACCOUNT_METRICS, sinceSeconds: until - ACCOUNT_WINDOW_DAYS * 86_400, untilSeconds: until,
+        metrics: accountMetricsFor(login), sinceSeconds: until - ACCOUNT_WINDOW_DAYS * 86_400, untilSeconds: until,
       });
       if (Object.keys(totals).length === 0) issue("", "empty", "account insights came back without a number");
       add("account", "", totals);
