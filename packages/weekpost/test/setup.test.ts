@@ -68,7 +68,7 @@ function ctxOf(over: Partial<SetupContext> & { runs?: Record<string, Partial<Run
 
 describe("latestMigration", () => {
   it("reads the highest number that ships with the package", () => {
-    expect(latestMigration()).toBe(5);
+    expect(latestMigration()).toBe(6);
   });
 });
 

@@ -41,7 +41,7 @@ function fakePg(over: { start?: number | null; failOn?: number; recorded?: (n: n
 describe("migrations on disk", () => {
   it("reads the shipped files in order", () => {
     const all = readMigrations();
-    expect(all.map((m) => m.version)).toEqual([1, 2, 3, 4, 5]);
+    expect(all.map((m) => m.version)).toEqual([1, 2, 3, 4, 5, 6]);
     expect(all[0]!.sql).toContain("weekpost_schema");
   });
   it("pendingAfter and printable", () => {

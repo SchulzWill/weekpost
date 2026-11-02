@@ -11,6 +11,7 @@ export const MIN_AGE_MS = DAY;
 export const ALERT_WHEN_LEFT_MS = 7 * DAY;
 
 export function needsRefresh(t: Token, now: number): boolean {
+  if (t.expiresAt === null || t.login === "unified") return false;
   return Date.parse(t.expiresAt) - now < REFRESH_WHEN_LEFT_MS && now - Date.parse(t.refreshedAt) >= MIN_AGE_MS;
 }
 
@@ -24,7 +25,7 @@ export async function refreshTokens(
   log: (e: string, d: Record<string, unknown>) => void, opts: RefreshOptions = { refresh: true },
 ): Promise<void> {
   for (const t of tokens.values()) {
-    if (Date.parse(t.expiresAt) - now < ALERT_WHEN_LEFT_MS) log("ERROR_token_expiring", { account: t.account, expiresAt: t.expiresAt });
+    if (t.expiresAt !== null && Date.parse(t.expiresAt) - now < ALERT_WHEN_LEFT_MS) log("ERROR_token_expiring", { account: t.account, expiresAt: t.expiresAt });
     if (!opts.refresh || !needsRefresh(t, now)) continue;
     try {
       const r = await graph.refresh(t.accessToken);

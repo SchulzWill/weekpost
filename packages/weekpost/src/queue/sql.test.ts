@@ -1,4 +1,4 @@
-// SQL suite for migrations/0001 to 0005. Needs a real Postgres (not part of `npm test`):
+// SQL suite for migrations/0001 to 0006. Needs a real Postgres (not part of `npm test`):
 //   docker run -d --name weekpost-test-pg -e POSTGRES_PASSWORD=postgres -p 55432:5432 postgres:17-alpine
 //   WEEKPOST_TEST_DATABASE_URL=postgres://postgres:postgres@localhost:55432/postgres npm run test:db
 // The suite creates and drops its own databases (prefix wp_test_) and the Supabase-style roles
@@ -13,6 +13,7 @@ const MIGRATION_2 = readFileSync(new URL("../../migrations/0002_media_hash.sql",
 const MIGRATION_3 = readFileSync(new URL("../../migrations/0003_stale_runs.sql", import.meta.url), "utf8");
 const MIGRATION_4 = readFileSync(new URL("../../migrations/0004_operator_functions.sql", import.meta.url), "utf8");
 const MIGRATION_5 = readFileSync(new URL("../../migrations/0005_metrics.sql", import.meta.url), "utf8");
+const MIGRATION_6 = readFileSync(new URL("../../migrations/0006_token_login.sql", import.meta.url), "utf8");
 const ROLES = ["service_role", "anon", "authenticated"];
 const PREFIX = "wp_test_";
 
@@ -45,7 +46,7 @@ async function connect(db: string): Promise<Client> {
 }
 
 /** Creates a fresh database and applies the migrations (only the first when `upTo` is 1, the first two when 2). */
-async function freshDb(upTo = 5): Promise<Client> {
+async function freshDb(upTo = 6): Promise<Client> {
   const name = `${PREFIX}${process.pid}_${counter++}`;
   await admin.query(`create database ${name}`);
   const c = await connect(name);
@@ -54,6 +55,7 @@ async function freshDb(upTo = 5): Promise<Client> {
   if (upTo >= 3) await c.query(MIGRATION_3);
   if (upTo >= 4) await c.query(MIGRATION_4);
   if (upTo >= 5) await c.query(MIGRATION_5);
+  if (upTo >= 6) await c.query(MIGRATION_6);
   return c;
 }
 
@@ -100,7 +102,7 @@ describe("0001_queue.sql: apply", () => {
   it("applies on a clean Postgres without the Supabase roles", async () => {
     const c = await freshDb();
     const { rows } = await c.query("select version from public.weekpost_schema");
-    expect(rows).toEqual([{ version: 5 }]);
+    expect(rows).toEqual([{ version: 6 }]);
     const roles = await admin.query("select rolname from pg_roles where rolname = any($1)", [ROLES]);
     expect(roles.rows).toEqual([]);
   });
@@ -633,7 +635,7 @@ describe("0005_metrics.sql", () => {
   };
 
   it("applies on top of 0004 and moves the schema to 5", async () => {
-    const c = await freshDb();
+    const c = await freshDb(5);
     expect((await c.query("select version from public.weekpost_schema")).rows).toEqual([{ version: 5 }]);
   });
 
@@ -681,5 +683,42 @@ describe("0005_metrics.sql", () => {
     await up(1);
     await up(2);
     expect((await c.query("select value::int from public.weekpost_metrics")).rows).toEqual([{ value: 2 }]);
+  });
+});
+
+describe("0006_token_login.sql", () => {
+  const insertToken = (c: Client, account: string, expires: string | null, login?: string) =>
+    login === undefined
+      ? c.query("insert into public.weekpost_tokens (account, ig_user_id, access_token, expires_at) values ($1,'12345',$2,$3)", [account, "x".repeat(30), expires])
+      : c.query("insert into public.weekpost_tokens (account, ig_user_id, access_token, expires_at, login) values ($1,'12345',$2,$3,$4)", [account, "x".repeat(30), expires, login]);
+
+  it("upgrades a 0005 database: existing tokens become instagram and keep their expiry", async () => {
+    const c = await freshDb(5);
+    await insertToken(c, "en", "2026-12-28T12:00:00Z");
+    await c.query(MIGRATION_6);
+    expect((await c.query("select version from public.weekpost_schema")).rows).toEqual([{ version: 6 }]);
+    const { rows } = await c.query("select account, login, expires_at from public.weekpost_tokens");
+    expect(rows).toEqual([{ account: "en", login: "instagram", expires_at: new Date("2026-12-28T12:00:00Z") }]);
+  });
+
+  it("defaults to instagram, accepts unified and a null expiry, and refuses another mode", async () => {
+    const c = await freshDb();
+    await insertToken(c, "en", "2026-12-28T12:00:00Z");
+    await insertToken(c, "pt", null, "unified");
+    await insertToken(c, "es", null);
+    await expect(insertToken(c, "de", null, "facebook")).rejects.toThrow(/check/);
+    const { rows } = await c.query("select account, login, expires_at is null as no_expiry from public.weekpost_tokens order by account");
+    expect(rows).toEqual([
+      { account: "en", login: "instagram", no_expiry: false },
+      { account: "es", login: "instagram", no_expiry: true },
+      { account: "pt", login: "unified", no_expiry: true },
+    ]);
+  });
+
+  it("keeps the 0005 behavior of the previous Worker: it writes tokens without `login` and a refresh keeps the mode", async () => {
+    const c = await freshDb();
+    await insertToken(c, "en", "2026-12-28T12:00:00Z", "unified");
+    await c.query("update public.weekpost_tokens set access_token = $1, expires_at = now() + interval '60 days' where account = 'en'", ["y".repeat(30)]);
+    expect((await c.query("select login from public.weekpost_tokens")).rows).toEqual([{ login: "unified" }]);
   });
 });

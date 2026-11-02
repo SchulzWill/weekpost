@@ -139,6 +139,7 @@ export function attentionLines(i: ReportInput): string[] {
     out.push(`- **The queue looks stopped:** ${i.overdue.length} scheduled post(s) are over ${OVERDUE_MINUTES} minutes late (${ids}). The Worker is not running them. Run \`npx weekpost doctor\`.`);
   }
   for (const t of i.tokens) {
+    if (t.expiresAt === null) continue;
     const left = Date.parse(t.expiresAt) - i.now.getTime();
     if (left < TOKEN_WARN_DAYS * DAY) {
       out.push(`- **Token of \`${clean(t.account)}\` ${left < 0 ? "has expired" : `expires in ${Math.ceil(left / DAY)} day(s)`}** (${clean(t.expiresAt.slice(0, 10))}). Run \`npx weekpost token ${clean(t.account)}\`.`);

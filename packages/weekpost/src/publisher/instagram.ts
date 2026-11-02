@@ -1,4 +1,7 @@
-// Minimal client for the Instagram API with Instagram Login (host graph.instagram.com, not Facebook Login).
+// Minimal client for the Instagram API, in its two modes (`login`):
+//   instagram: Instagram API with Instagram Login, host graph.instagram.com (the default)
+//   unified:   Instagram API with Unified login, host graph.facebook.com
+// The publishing paths and parameters are the same in both; only the host changes.
 // Sources (Meta):
 //   publishing: https://developers.facebook.com/docs/instagram-platform/content-publishing
 //   refresh:    https://developers.facebook.com/docs/instagram-platform/instagram-api-with-instagram-login/business-login#refresh-a-long-lived-token
@@ -9,7 +12,7 @@
 //   https://developers.facebook.com/docs/instagram-platform/content-publishing
 //   NOT VERIFIED: the docs show the header only on the POST calls. The status and permalink GETs use it too (the
 //   Graph API convention); confirm on the first real run, and move them back to the query if Meta rejects it.
-import type { Fetch } from "../queue/types.ts";
+import type { Fetch, LoginMode } from "../queue/types.ts";
 
 /**
  * Pinned version. Override it with `graphVersion` in the run options if Meta rejects something,
@@ -30,14 +33,18 @@ export function redact(text: string, secret: string): string {
   return secret ? text.split(secret).join("[token]") : text;
 }
 
+/** Host of each login mode. */
+export const GRAPH_HOSTS: Record<LoginMode, string> = { instagram: "graph.instagram.com", unified: "graph.facebook.com" };
+
 export class InstagramGraph {
   constructor(
     private readonly fetchFn: Fetch,
     private readonly version: string = GRAPH_API_VERSION,
+    private readonly login: LoginMode = "instagram",
   ) {}
 
   private url(path: string): string {
-    return `https://graph.instagram.com/${this.version}/${path}`;
+    return `https://${GRAPH_HOSTS[this.login]}/${this.version}/${path}`;
   }
 
   private async call(
@@ -156,6 +163,7 @@ export class InstagramGraph {
 
   /** Long-lived token to a new 60-day one. Needs a token that is at least 24 h old and still valid. */
   async refresh(token: string): Promise<{ accessToken: string; expiresInSeconds: number }> {
+    if (this.login !== "instagram") throw new GraphError("Instagram: tokens of the Unified login cannot be refreshed");
     const body = await this.call("GET", "https://graph.instagram.com/refresh_access_token", token, { grant_type: "ig_refresh_token" }, { tokenInQuery: true });
     if (typeof body.access_token !== "string" || typeof body.expires_in !== "number") {
       throw new GraphError("Instagram: unexpected refresh_access_token response");

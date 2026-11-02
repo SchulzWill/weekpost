@@ -154,7 +154,18 @@ describe("PublisherDb", () => {
 
   it("tokens maps rows", async () => {
     const { db: d } = db(() => [{ account: "en", ig_user_id: "1", access_token: "t", expires_at: "e", refreshed_at: "r" }]);
-    expect(await d.tokens()).toEqual([{ account: "en", igUserId: "1", accessToken: "t", expiresAt: "e", refreshedAt: "r" }]);
+    expect(await d.tokens()).toEqual([{ account: "en", igUserId: "1", accessToken: "t", expiresAt: "e", refreshedAt: "r", login: "instagram" }]);
+  });
+
+  it("tokens reads the login mode and a null expiry; a missing or unknown mode counts as instagram", async () => {
+    const { db: d, calls } = db(() => [
+      { account: "en", ig_user_id: "1", access_token: "t", expires_at: null, refreshed_at: "r", login: "unified" },
+      { account: "pt", ig_user_id: "2", access_token: "t", expires_at: "e", refreshed_at: "r", login: "instagram" },
+      { account: "es", ig_user_id: "3", access_token: "t", expires_at: "e", refreshed_at: "r" },
+    ]);
+    const rows = await d.tokens();
+    expect(calls[0]!.url).toContain("select=account,ig_user_id,access_token,expires_at,refreshed_at,login");
+    expect(rows.map((r) => [r.account, r.login, r.expiresAt])).toEqual([["en", "unified", null], ["pt", "instagram", "e"], ["es", "instagram", "e"]]);
   });
 
   it("duePurge, markPurged and stuck query published and publishing rows", async () => {

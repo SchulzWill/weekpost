@@ -53,12 +53,18 @@ export type NewRow = Pick<
   status?: "scheduled" | "manual";
 };
 
+/** Which Instagram API a token belongs to (migration 0006): Instagram Login (`graph.instagram.com`) or Unified login (`graph.facebook.com`). */
+export type LoginMode = "instagram" | "unified";
+
 export interface Token {
   account: string;
   igUserId: string;
   accessToken: string;
-  expiresAt: string;
+  /** Null: the token does not expire (Unified login, migration 0006). */
+  expiresAt: string | null;
   refreshedAt: string;
+  /** Absent counts as `instagram`. */
+  login?: LoginMode;
 }
 
 export interface PublisherDb {
@@ -99,7 +105,7 @@ export interface OperatorDb {
   /** Only `publishing`. */
   resolveStuck(k: Key, outcome: { published: true; permalink: string } | { published: false }): Promise<void>;
   /** Insert or replace the token of an account (`weekpost token`). */
-  upsertToken(t: { account: string; igUserId: string; accessToken: string; expiresAt: string }): Promise<void>;
+  upsertToken(t: { account: string; igUserId: string; accessToken: string; expiresAt: string | null; login?: LoginMode }): Promise<void>;
 }
 
 /** One collected number. `postId` is the empty string for the account scope. */
