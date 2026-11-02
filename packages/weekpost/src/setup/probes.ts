@@ -29,7 +29,7 @@ export function supabaseCreds(env: Record<string, string | undefined>, localEnvF
 const NO_CREDS = "no Supabase URL and key yet (set WEEKPOST_SUPABASE_URL and WEEKPOST_SUPABASE_KEY, or run the local.secrets step)";
 
 /** GET on the Supabase REST/storage API; the status is returned instead of thrown for the answers a probe understands. */
-async function supabaseGet(ctx: SetupContext, path: string): Promise<{ status: number; body: unknown }> {
+async function supabaseGet(ctx: Pick<SetupContext, "supabase" | "fetch">, path: string): Promise<{ status: number; body: unknown }> {
   try {
     return await request(ctx.fetch, ctx.supabase.url!.replace(/\/+$/, ""), ctx.supabase.key!, path);
   } catch (e) {
@@ -63,7 +63,7 @@ async function deps(ctx: SetupContext): Promise<Probe> {
 }
 
 /** The version recorded in weekpost_schema: 0 when the table does not exist, null when it cannot be read. */
-export async function schemaVersion(ctx: SetupContext): Promise<number | null> {
+export async function schemaVersion(ctx: Pick<SetupContext, "supabase" | "fetch">): Promise<number | null> {
   if (!ctx.supabase.url || !ctx.supabase.key) return null;
   const r = await supabaseGet(ctx, "/rest/v1/weekpost_schema?select=version");
   if (r.status === 404) return 0;

@@ -1,8 +1,10 @@
-// Does a token have `instagram_business_manage_insights`? Asked the way `weekpost metrics` finds out: one small account
+// Does a token have the Insights permission (`instagram_business_manage_insights`, or `instagram_manage_insights` on the
+// Unified login)? Asked the way `weekpost metrics` finds out: one small account
 // Insights call, and Meta's permission errors (codes 10 and 200) mean the permission is missing. Any other failure
 // (network, rate limit, a token Meta rejects) proves nothing about the permission, so it counts as "unknown".
 //   https://developers.facebook.com/docs/instagram-platform/api-reference/instagram-user/insights
 import type { InstagramGraph } from "../publisher/instagram.ts";
+import type { LoginMode } from "../queue/types.ts";
 import { classify } from "./collect.ts";
 
 export type InsightsAccess = "ok" | "missing" | "unknown";
@@ -17,6 +19,11 @@ export async function insightsAccess(graph: Pick<InstagramGraph, "accountInsight
   }
 }
 
+/** The Insights permission each login mode asks for. */
+export const INSIGHTS_PERMISSION: Record<LoginMode, string> = { instagram: "instagram_business_manage_insights", unified: "instagram_manage_insights" };
+
 /** The warning for a token that cannot read Insights. Publishing works without the permission, so it is never an error. */
-export const noInsightsMessage = (account: string) =>
-  `the token for \`${account}\` cannot read Insights, so \`weekpost metrics\` will have no numbers (posts still publish). Generate it again in Meta's "API setup with Instagram login" with all three permissions (setup step 4, item 5), then run \`npx weekpost token ${account}\`.`;
+export const noInsightsMessage = (account: string, login: LoginMode = "instagram") =>
+  login === "unified"
+    ? `the token for \`${account}\` cannot read Insights, so \`weekpost metrics\` will have no numbers (posts still publish). In Meta's "API setup with Unified login", edit the configuration's permissions to add ${INSIGHTS_PERMISSION.unified}, generate the token again, then run \`npx weekpost token ${account}\`.`
+    : `the token for \`${account}\` cannot read Insights, so \`weekpost metrics\` will have no numbers (posts still publish). Generate it again in Meta's "API setup with Instagram login" with all three permissions (setup step 4, item 5), then run \`npx weekpost token ${account}\`.`;

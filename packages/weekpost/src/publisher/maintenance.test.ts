@@ -61,8 +61,11 @@ describe("token refresh", () => {
     ];
     const tokens = new Map((await db.tokens()).map((t) => [t.account, t]));
     const { logs, log } = logger();
+    let saves = 0;
+    db.saveToken = async () => (saves++, true);
     await refreshTokens(tokens, db, meta.graph(), now, log);
     expect(meta.calls).toEqual([]);
+    expect(saves).toBe(0);
     expect(logs.filter((l) => l.startsWith("ERROR_token_expiring")).length).toBe(1); // only "b" has a date and it is close
     expect(needsRefresh(tokens.get("a")!, now)).toBe(false);
     expect(needsRefresh(tokens.get("c")!, now)).toBe(false);

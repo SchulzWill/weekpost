@@ -13,7 +13,7 @@ function setup(rows: ReturnType<typeof post>[] = [], accounts = ["main", "second
   db.rows = rows;
   db.tokensRows = accounts.map((a) => token(a, { refreshedAt: new Date(NOW - 10 * DAY).toISOString(), expiresAt: new Date(NOW + 50 * DAY).toISOString() }));
   const logs: string[] = [];
-  const deps: RunDeps = { db, storage, graph: meta.graph(), now: () => NOW, sleep: async () => {}, log: (e, d) => logs.push(`${e} ${JSON.stringify(d)}`) };
+  const deps: RunDeps = { db, storage, graph: meta.graph, now: () => NOW, sleep: async () => {}, log: (e, d) => logs.push(`${e} ${JSON.stringify(d)}`) };
   return { db, meta, storage, deps, logs };
 }
 
@@ -72,12 +72,13 @@ describe("run", () => {
   });
 
   it("a post that throws past markFailed is logged and the next one still goes", async () => {
-    const { db, deps, logs } = setup([post({ postId: "a", media: ["2026-W42/a/s.jpg"], publishAtMs: 0 }), post({ postId: "b", media: ["2026-W42/b/s.jpg"], publishAtMs: 1 })]);
+    const { db, meta, deps, logs } = setup([post({ postId: "a", media: ["2026-W42/a/s.jpg"], publishAtMs: 0 }), post({ postId: "b", media: ["2026-W42/b/s.jpg"], publishAtMs: 1 })]);
     const real = db.markFailed.bind(db);
     db.markFailed = async (k, e, r) => (k.postId === "a" ? Promise.reject(new Error("database down")) : real(k, e, r));
-    const meta = deps.graph; void meta;
     // make "a" fail on Meta so that markFailed is reached
-    (deps.graph as unknown as { fetchFn: typeof fetch }).fetchFn = (async (u: string) => {
+    const graph = meta.graph();
+    deps.graph = () => graph;
+    (graph as unknown as { fetchFn: typeof fetch }).fetchFn = (async (u: string) => {
       if (String(u).includes("/media")) return new Response(JSON.stringify({ error: { message: "x", code: 1 } }), { status: 400 });
       return new Response("{}", { status: 404 });
     }) as typeof fetch;
@@ -85,6 +86,30 @@ describe("run", () => {
     expect(logs.some((l) => l.startsWith("ERROR_post "))).toBe(true);
     expect(out.claimed).toBe(2);
     expect(db.rows[0]!.status).toBe("publishing");
+  });
+
+  it("sends each post to the host of its account's token, both modes in the same run", async () => {
+    const { db, meta, deps } = setup([
+      post({ postId: "a", account: "main", media: ["2026-W42/a/main/s.jpg"], publishAtMs: 0 }),
+      post({ postId: "b", account: "second", media: ["2026-W42/b/second/s.jpg"], publishAtMs: 1 }),
+    ]);
+    db.tokensRows[1] = { ...db.tokensRows[1]!, login: "unified", igUserId: "70002", expiresAt: null };
+    const out = await run({}, deps);
+    expect(out.outcomes).toEqual(["published", "published"]);
+    const hosts = (user: string) => new Set(meta.calls.filter((c) => c.path.includes(`/${user}/`)).map((c) => new URL(c.url).host));
+    expect(hosts("ig-user-1")).toEqual(new Set(["graph.instagram.com"]));
+    expect(hosts("70002")).toEqual(new Set(["graph.facebook.com"]));
+    // Each post made its 4 calls (container, status, publish, permalink) on its own host.
+    expect(meta.calls.filter((c) => new URL(c.url).host === "graph.facebook.com")).toHaveLength(4);
+    expect(meta.calls.filter((c) => new URL(c.url).host === "graph.instagram.com")).toHaveLength(4);
+  });
+
+  it("never renews a Unified login token, even close to expiry", async () => {
+    const { db, meta, deps, logs } = setup();
+    db.tokensRows = [{ ...db.tokensRows[0]!, login: "unified", expiresAt: new Date(NOW + 3 * DAY).toISOString() }];
+    await run({}, deps);
+    expect(meta.count(/refresh_access_token/)).toBe(0);
+    expect(logs.some((l) => l.startsWith("ERROR_token_expiring"))).toBe(true);
   });
 
   it("clamps maxPostsPerRun to 1..10", () => {
@@ -126,7 +151,7 @@ describe("subrequest budget (Workers Free: 50 per invocation)", () => {
     tick(s.storage, ["sign", "remove"]);
     const realFetch = s.meta.fetch;
     s.meta.fetch = (async (...a: Parameters<typeof fetch>) => (n++, realFetch(...a))) as typeof s.meta.fetch;
-    s.deps.graph = s.meta.graph();
+    s.deps.graph = s.meta.graph;
     s.deps.subrequests = () => n;
     return { ...s, used: () => n };
   }
@@ -139,6 +164,17 @@ describe("subrequest budget (Workers Free: 50 per invocation)", () => {
     expect(s.used()).toBeLessThanOrEqual(50);
     expect(s.logs.some((l) => l.startsWith("ERROR_budget"))).toBe(true);
     expect(s.logs.some((l) => l.startsWith("subrequests"))).toBe(true);
+  });
+
+  it("a Unified login account costs the same subrequests as an Instagram Login one", async () => {
+    const one = counted([carousel("a"), carousel("b")].map((p, i) => ({ ...p, publishAtMs: i })), true);
+    await run({ subrequestBudget: 50 }, one.deps);
+    const mixed = counted([carousel("a"), { ...carousel("b"), account: "second" }].map((p, i) => ({ ...p, publishAtMs: i })), true);
+    mixed.db.tokensRows[1] = { ...mixed.db.tokensRows[1]!, login: "unified", expiresAt: null };
+    await run({ subrequestBudget: 50 }, mixed.deps);
+    expect(mixed.db.rows.map((r) => r.status)).toEqual(["published", "published"]);
+    expect(mixed.used()).toBe(one.used());
+    expect(mixed.used()).toBeLessThanOrEqual(50);
   });
 
   it("the default of 2 carousels of 10 stays under 50 with a token refresh included", async () => {

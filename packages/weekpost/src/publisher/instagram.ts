@@ -12,6 +12,9 @@
 //   https://developers.facebook.com/docs/instagram-platform/content-publishing
 //   NOT VERIFIED: the docs show the header only on the POST calls. The status and permalink GETs use it too (the
 //   Graph API convention); confirm on the first real run, and move them back to the query if Meta rejects it.
+//   The same holds for the GETs on graph.facebook.com (Unified login). Where the token goes is decided in one place
+//   (`credentials`), so a switch to `access_token` in the query for the Unified login only touches that method.
+//   Unified login accounts: https://developers.facebook.com/docs/instagram-platform/instagram-api-with-unified-login/get-started
 import type { Fetch, LoginMode } from "../queue/types.ts";
 
 /**
@@ -43,6 +46,11 @@ export class InstagramGraph {
     private readonly login: LoginMode = "instagram",
   ) {}
 
+  /** Login mode of this client. */
+  get loginMode(): LoginMode {
+    return this.login;
+  }
+
   private url(path: string): string {
     return `https://${GRAPH_HOSTS[this.login]}/${this.version}/${path}`;
   }
@@ -50,8 +58,8 @@ export class InstagramGraph {
   private async call(
     method: "GET" | "POST", url: string, token: string, params: Record<string, string>, opts: { tokenInQuery?: boolean } = {},
   ): Promise<Record<string, unknown>> {
-    const all = opts.tokenInQuery ? { ...params, access_token: token } : params;
-    const auth: Record<string, string> = opts.tokenInQuery ? {} : { authorization: `Bearer ${token}` };
+    const { query, headers: auth } = this.credentials(token, opts.tokenInQuery ?? false);
+    const all = { ...params, ...query };
     let res: Response;
     try {
       res =
@@ -73,6 +81,14 @@ export class InstagramGraph {
       throw new GraphError(redact(`Instagram${code}: ${msg}`, token), err.code, err.error_subcode);
     }
     return body;
+  }
+
+  /**
+   * Where the token travels: the `Authorization: Bearer` header, or the `access_token` query parameter when a call's
+   * documented example uses it (`tokenInQuery`). The only place that decides it, for both login modes.
+   */
+  private credentials(token: string, tokenInQuery: boolean): { query: Record<string, string>; headers: Record<string, string> } {
+    return tokenInQuery ? { query: { access_token: token }, headers: {} } : { query: {}, headers: { authorization: `Bearer ${token}` } };
   }
 
   private async create(igUserId: string, token: string, params: Record<string, string>): Promise<string> {
@@ -154,6 +170,28 @@ export class InstagramGraph {
       throw new GraphError("Instagram: unexpected /me response (no user_id or username)");
     }
     return { userId: String(userId), username: body.username };
+  }
+
+  /**
+   * The Instagram accounts a Unified login token may act on: `GET /me/assigned_instagram_accounts`, every page.
+   * `/me` alone is the business integration system user, not an Instagram account. Pages are followed by the `after`
+   * cursor (never by `paging.next`, which may carry the token in its query), up to `maxPages`.
+   */
+  async assignedAccounts(token: string, maxPages = 10): Promise<{ id: string; username: string }[]> {
+    const out: { id: string; username: string }[] = [];
+    let after: string | undefined;
+    for (let page = 0; page < maxPages; page++) {
+      const body = await this.call("GET", this.url("me/assigned_instagram_accounts"), token, { fields: "id,username", ...(after ? { after } : {}) });
+      if (!Array.isArray(body.data)) throw new GraphError("Instagram: unexpected assigned_instagram_accounts response (no data)");
+      for (const a of body.data as { id?: unknown; username?: unknown }[]) {
+        if ((typeof a.id === "string" || typeof a.id === "number") && typeof a.username === "string") out.push({ id: String(a.id), username: a.username });
+      }
+      const paging = body.paging as { next?: unknown; cursors?: { after?: unknown } } | undefined;
+      const next = paging?.next && typeof paging.cursors?.after === "string" ? paging.cursors.after : undefined;
+      if (!next || next === after) break;
+      after = next;
+    }
+    return out;
   }
 
   /** Succeeds only when the token may publish: `GET /<ig-user-id>/content_publishing_limit`. */

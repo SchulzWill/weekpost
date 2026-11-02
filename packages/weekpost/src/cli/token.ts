@@ -1,21 +1,33 @@
-// weekpost token <account> [--prompt] [--project=<dir>]
-// Reads a long-lived Instagram token from the clipboard (or a hidden prompt), checks on the Graph API that it
-// belongs to the account named in the config and may publish, then saves it in `weekpost_tokens` and clears the
-// clipboard. Needs a terminal. The token is never printed: not on success, not in any error.
+// weekpost token <account> [--prompt] [--login=instagram|unified] [--project=<dir>]
+// Reads an Instagram token from the clipboard (or a hidden prompt), finds out which API it belongs to (Instagram
+// Login on graph.instagram.com, or Unified login on graph.facebook.com), checks that it belongs to the account named
+// in the config and may publish, then saves it in `weekpost_tokens` with its login mode and clears the clipboard.
+// Needs a terminal. The token is never printed: not on success, not in any error.
+// Unified login: `/me` is the business integration system user, so the account comes from
+// `/me/assigned_instagram_accounts`: https://developers.facebook.com/docs/instagram-platform/instagram-api-with-unified-login/get-started
 import { spawnSync } from "node:child_process";
 import { loadConfig } from "../config/load.ts";
 import { ConfigError } from "../config/parse.ts";
 import type { WeekpostConfig } from "../config/schema.ts";
 import { insightsAccess, noInsightsMessage } from "../metrics/access.ts";
-import { GraphError, InstagramGraph, redact } from "../publisher/instagram.ts";
+import { createInterface } from "node:readline/promises";
+import { GRAPH_API_VERSION, GraphError, InstagramGraph, redact } from "../publisher/instagram.ts";
 import { supabaseDb } from "../queue/supabase.ts";
-import type { OperatorDb } from "../queue/types.ts";
+import type { LoginMode, OperatorDb } from "../queue/types.ts";
+import { schemaVersion } from "../setup/probes.ts";
 import { projectPaths, type Out } from "./check.ts";
 import { positional } from "./queueCommon.ts";
 import { readSecret, requireTty, SecretError, withLocalEnv } from "./secrets.ts";
 
 /** The token of the Instagram panel lasts 60 days; we record 59 so a refresh is never late. */
 export const TOKEN_DAYS = 59;
+
+/** Migration 0006 lets a token row say its login mode and have no expiry. */
+export const UNIFIED_MIN_SCHEMA = 6;
+
+export const LOGIN_LABEL: Record<LoginMode, string> = { instagram: "Instagram Login", unified: "Unified login" };
+const PUBLISH_PERMISSION: Record<LoginMode, string> = { instagram: "instagram_business_content_publish", unified: "instagram_content_publish" };
+const USAGE = "usage: weekpost token <account> [--prompt] [--login=instagram|unified]";
 
 export interface Clipboard {
   /** The text on the clipboard, or null when it cannot be read. */
@@ -31,6 +43,10 @@ export type TokenDeps = {
   clipboard?: Clipboard;
   /** Hidden prompt. */
   ask?: (label: string) => Promise<string>;
+  /** Visible one-line prompt (the expiry of a Unified login token). */
+  choose?: (question: string) => Promise<string>;
+  /** Database schema version; null when it cannot be read. Default: read from Supabase. */
+  schemaVersion?: () => Promise<number | null>;
   now?: () => Date;
   env?: Record<string, string | undefined>;
   /** Home directory the local secrets file is read from. Default: the real one; tests pass a temporary one. */
@@ -71,10 +87,12 @@ const looksLikeToken = (v: string) => /^[A-Za-z0-9_.-]{21,1024}$/.test(v);
 // Returns the exit code.
 export async function runToken(args: string[], out: Out = console, cwd = process.cwd(), deps: TokenDeps = {}): Promise<number> {
   const [accountId] = positional(args);
-  if (!accountId) {
-    out.error("usage: weekpost token <account> [--prompt]");
+  const loginArg = args.find((a) => a.startsWith("--login="))?.slice("--login=".length);
+  if (!accountId || (loginArg !== undefined && loginArg !== "instagram" && loginArg !== "unified")) {
+    out.error(USAGE);
     return 2;
   }
+  const forced = loginArg as LoginMode | undefined;
   const blocked = requireTty("token", out, deps.tty);
   if (blocked) return blocked;
 
@@ -119,50 +137,108 @@ export async function runToken(args: string[], out: Out = console, cwd = process
     out.error(e instanceof SecretError ? e.message : "could not read the token");
     return 1;
   }
+  const env = (() => {
+    let cached: Record<string, string | undefined> | undefined;
+    return () => (cached ??= withLocalEnv(deps.env ?? process.env, projectRoot, deps.home, { tty: true }));
+  })();
   const dbKey = (deps.env ?? process.env).WEEKPOST_SUPABASE_KEY ?? "";
   // Defense in depth: the adapters already scrub their messages; this scrubs the token and the service key again.
   const safe = (e: unknown) => redact(redact(String((e as Error)?.message ?? e), token), dbKey);
 
-  const graph = new InstagramGraph(deps.fetch ?? fetch);
-  let me: { userId: string; username: string };
-  try {
-    me = await graph.me(token);
-  } catch (e) {
-    out.error(`Instagram did not accept the token: ${safe(e)}`);
+  // Which API the token belongs to. The prefix only picks the order of the attempts, never the answer.
+  const order: LoginMode[] = forced ? [forced] : token.startsWith("EAA") ? ["unified", "instagram"] : ["instagram", "unified"];
+  const fetchFn = deps.fetch ?? fetch;
+  let found: { login: LoginMode; graph: InstagramGraph; userId: string; username: string } | undefined;
+  const failures: { login: LoginMode; error: unknown }[] = [];
+  for (const login of order) {
+    const graph = new InstagramGraph(fetchFn, GRAPH_API_VERSION, login);
+    let id: Identified;
+    try {
+      id = await identify(graph, token, accountId, account.handle);
+    } catch (e) {
+      failures.push({ login, error: e });
+      continue;
+    }
+    // The token was accepted but is not the configured account's: a definite answer, the other API is not asked.
+    if ("mismatch" in id) {
+      out.error(`${id.mismatch}; nothing was saved`);
+      return 1;
+    }
+    found = { login, graph, ...id };
+    break;
+  }
+  if (!found) {
+    if (failures.length > 1 && failures.every((f) => f.error instanceof GraphError && f.error.code === 190)) {
+      out.error("token not accepted by Instagram Login nor Unified login; generate it again in Meta's app dashboard and run this again (nothing was saved)");
+    } else {
+      out.error(`Instagram did not accept the token (${failures.map((f) => `${LOGIN_LABEL[f.login]}: ${safe(f.error)}`).join("; ")}); nothing was saved`);
+    }
     return 1;
   }
-  if (me.username.toLowerCase() !== account.handle.toLowerCase()) {
-    out.error(`this token belongs to @${me.username}, but account "${accountId}" is @${account.handle}; nothing was saved`);
-    return 1;
+  const { login, graph, userId, username } = found;
+
+  if (login === "unified") {
+    // An older Worker reads a null expiry as an invalid date, so a Unified login token waits for migration 0006.
+    let version: number | null;
+    try {
+      version = await (deps.schemaVersion ?? (() => {
+        const e = env();
+        return schemaVersion({ supabase: { url: e.WEEKPOST_SUPABASE_URL, key: e.WEEKPOST_SUPABASE_KEY }, fetch: fetchFn });
+      }))();
+    } catch {
+      version = null;
+    }
+    if (version === null || version < UNIFIED_MIN_SCHEMA) {
+      out.error(
+        version === null
+          ? `could not read the database schema version, and a Unified login token needs schema ${UNIFIED_MIN_SCHEMA}; check the Supabase URL and key with \`npx weekpost doctor\` (nothing was saved)`
+          : `the database is at schema ${version}, and a Unified login token needs schema ${UNIFIED_MIN_SCHEMA} or newer. Run \`npx weekpost setup --apply --only=db.migrate\`, then \`npx weekpost setup --apply --only=worker.deploy\`, then this again (nothing was saved)`,
+      );
+      return 1;
+    }
   }
+
   try {
-    await graph.publishingLimit(me.userId, token);
+    await graph.publishingLimit(userId, token);
   } catch (e) {
     out.error(
       e instanceof GraphError
-        ? `the token cannot publish (${safe(e)}); generate it again with the instagram_business_content_publish permission and run this again`
+        ? `the token cannot publish (${safe(e)}); generate it again with the ${PUBLISH_PERMISSION[login]} permission and run this again`
         : `error: ${safe(e)}`,
     );
     return 1;
   }
-  out.log(`token ok: @${me.username} (${me.userId})`);
+  out.log(`token ok: @${username} (${userId}), ${LOGIN_LABEL[login]}`);
   const now = (deps.now ?? (() => new Date()))();
   // A warning, not an error: publishing works without the Insights permission, so the token is still saved.
-  if ((await insightsAccess(graph, me.userId, token, now)) === "missing") out.log(`warning: ${noInsightsMessage(accountId)}`);
+  if ((await insightsAccess(graph, userId, token, now)) === "missing") out.log(`warning: ${noInsightsMessage(accountId, login)}`);
 
-  const expiresAt = new Date(now.getTime() + TOKEN_DAYS * 86_400_000).toISOString();
+  let expiresAt: string | null = new Date(now.getTime() + TOKEN_DAYS * 86_400_000).toISOString();
+  if (login === "unified") {
+    // weekpost cannot read a Unified login token's expiry (that needs the app secret), so the user says what Meta showed.
+    const days = await askValidity(deps.choose ?? askLine);
+    if (days === undefined) {
+      out.error('expected "never" or "60 days"; nothing was saved');
+      return 1;
+    }
+    if (days === null) expiresAt = null;
+  }
+
   try {
     let db = deps.db;
     if (!db) {
-      const env = withLocalEnv(deps.env ?? process.env, projectRoot, deps.home, { tty: true });
-      db = supabaseDb(env.WEEKPOST_SUPABASE_URL ?? "", env.WEEKPOST_SUPABASE_KEY ?? "");
+      const e = env();
+      db = supabaseDb(e.WEEKPOST_SUPABASE_URL ?? "", e.WEEKPOST_SUPABASE_KEY ?? "");
     }
-    await db.upsertToken({ account: accountId, igUserId: me.userId, accessToken: token, expiresAt });
+    await db.upsertToken({ account: accountId, igUserId: userId, accessToken: token, expiresAt, login });
   } catch (e) {
     out.error(`could not save the token: ${safe(e)}`);
     return 1;
   }
-  out.log(`saved weekpost_tokens[${accountId}] (expires ${expiresAt.slice(0, 10)})`);
+  out.log(`saved weekpost_tokens[${accountId}] (${LOGIN_LABEL[login]}, ${expiresAt ? `expires ${expiresAt.slice(0, 10)}` : "does not expire"})`);
+  if (login === "unified" && expiresAt) {
+    out.log(`warning: weekpost cannot renew a Unified login token, so this one stops working around ${expiresAt.slice(0, 10)}. Generate a new token with the expiry set to "never" and run \`npx weekpost token ${accountId}\` again.`);
+  }
 
   if (fromClipboard) {
     try {
@@ -173,6 +249,41 @@ export async function runToken(args: string[], out: Out = console, cwd = process
     }
   }
   return 0;
+}
+
+type Identified = { userId: string; username: string } | { mismatch: string };
+
+/** The account behind the token on one API. Throws what Meta answered when that API does not accept the token. */
+async function identify(graph: InstagramGraph, token: string, accountId: string, handle: string): Promise<Identified> {
+  if (graph.loginMode === "instagram") {
+    const me = await graph.me(token);
+    return me.username.toLowerCase() === handle.toLowerCase() ? me : { mismatch: `this token belongs to @${me.username}, but account "${accountId}" is @${handle}` };
+  }
+  const accounts = await graph.assignedAccounts(token);
+  const match = accounts.find((a) => a.username.toLowerCase() === handle.toLowerCase());
+  if (match) return { userId: match.id, username: match.username };
+  if (!accounts.length) return { mismatch: `this Unified login token sees no Instagram account, but account "${accountId}" is @${handle}; pick that account when you generate the token` };
+  return { mismatch: `this token sees ${accounts.map((a) => `@${a.username}`).join(", ")}, but account "${accountId}" is @${handle}` };
+}
+
+/** Days the token lasts: null for "never", 60, or undefined after three answers that are neither. */
+async function askValidity(choose: (q: string) => Promise<string>): Promise<null | 60 | undefined> {
+  const q = 'How long does this token last? Meta shows it in the configuration preview; weekpost cannot renew a Unified login token, so "never" is the one to pick [never/60 days] (never): ';
+  for (let i = 0; i < 3; i++) {
+    const a = (await choose(q)).trim().toLowerCase();
+    if (a === "" || a === "never" || a === "n") return null;
+    if (/^60\s*(d|days?)?$/.test(a)) return 60;
+  }
+  return undefined;
+}
+
+async function askLine(question: string): Promise<string> {
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  try {
+    return await rl.question(question);
+  } finally {
+    rl.close();
+  }
 }
 
 function readPrompt(deps: TokenDeps): Promise<string> {
