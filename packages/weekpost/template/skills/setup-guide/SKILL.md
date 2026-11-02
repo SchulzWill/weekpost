@@ -5,7 +5,7 @@ description: Guides a person through installing weekpost, account by account, un
 
 # Set up weekpost, guided
 
-You walk a person through the setup. The accounts are theirs and the secrets never pass through you: you read the state, say the next step, print the exact command, and wait for them to run it in their own terminal. Aim for 1 to 1.5 hours; nearly all of it is creating accounts, and the Meta app is the slow one.
+You walk a person through the setup. The accounts are theirs and the secrets never pass through you: you read the state, say the next step, print the exact command, and wait for them to run it in their own terminal. A first-timer needs about three hours, most of it creating accounts; the Meta app is the slow one.
 
 Read-only commands are yours: `npx weekpost doctor --json` and `npx weekpost setup --plan --json`. Their output holds no secret. Everything that writes is the person's: `setup --apply`, `token`, `first-post`, `wrangler`, `gh auth login`.
 
@@ -48,9 +48,9 @@ Direct links open the dashboard home or the official docs. Do not describe deepe
 - Needs a professional (Business or Creator) Instagram account they own, a public page for a privacy policy, and a business portfolio. New apps offer only "API setup with Unified login"; creating a portfolio adds about 15 minutes.
 - Business portfolio: create one (or use theirs) and add the Instagram account to it (Accounts, Instagram accounts).
 - Create an app with the use case "Manage messaging & content on Instagram"; in that use case's Customize page, connect the business portfolio (the Unified login section appears only then). Set the Privacy Policy URL.
-- Configure your app, Create new configuration: keep "System-user access token" and "Token will never expire"; edit the permissions down to `instagram_basic`, `instagram_content_publish` and `instagram_manage_insights` (the last is not in Meta's template; it is only for `weekpost metrics`). No ad account, no `ads_*`, no `instagram_manage_comments`.
-- App roles, Add People, Instagram Tester; the person accepts on Instagram (profile settings, Website permissions, Apps and websites, Tester invites). The account must be public.
-- Generate access tokens, Add account, Generate token, picking the portfolio and the account. Meta shows the token once: copy it right away. Leave the app in development mode; Webhooks and App Review are not needed.
+- Send the tester invite early (the slow part): App roles, Roles, Add People, Instagram Tester; it stays "Pending" until the person accepts on Instagram (profile settings, Website permissions, Apps and websites, Tester invites). The account must be public. It is the fallback if the Instagram login in Add account does not work.
+- In the use case's Customize page, API setup with Unified login, Configure your app, Create new configuration: keep "System-user access token" and "Token will never expire" (the template already sets both); edit the permissions down to `instagram_basic`, `instagram_content_publish` and `instagram_manage_insights` (the last is not in Meta's template; it is only for `weekpost metrics`). No ad account, no `ads_*`, no `instagram_manage_comments`; keep `instagram_manage_messages` if Meta does not let them remove it.
+- Generate access tokens, Add account: the popup asks them to log in to the Instagram account the brand posts from. Then Generate token, picking the portfolio and the account. Meta shows the token once: copy it right away. Leave the app in development mode; Webhooks and App Review are not needed.
 - Older apps that still show "API setup with Instagram login": add the account as a tester there and generate the token with `instagram_business_basic`, `instagram_business_content_publish` and `instagram_business_manage_insights` (60 days, the Worker renews it).
 - Then the person runs `npx weekpost token <account>` (the account id from `weekpost.config.ts`), one account at a time. It reads the clipboard; `--prompt` uses a hidden prompt. It detects which login the token is from; for a Unified login token it asks how long it lasts: the answer is `never`.
 

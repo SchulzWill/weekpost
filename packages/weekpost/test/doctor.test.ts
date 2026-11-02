@@ -207,7 +207,7 @@ describe("weekpost doctor", () => {
       const c = find(r.checks, "token.en");
       expect(c.level).toBe("fail");
       expect(c.detail).toContain(text);
-      expect(c.fix).toBe("npx weekpost token en");
+      expect(c.fix).toBe("generate a new token in the Meta dashboard (docs/setup.md, step 4), copy it, then: npx weekpost token en");
       expect(r.code).toBe(1);
     }
     expect(find((await greenDoctor((w) => (w.tokens = [row({ expiresAt: t(8) })]))).checks, "token.en").level).toBe("ok");
@@ -255,7 +255,7 @@ describe("weekpost doctor", () => {
         unified()(w);
         w.http["graph.facebook.com/v26.0/me/assigned_instagram_accounts?fields=id%2Cusername"] = [200, { data: [{ id: "999", username: "myapp" }] }];
       });
-      expect(find(gone.checks, "token.en")).toMatchObject({ level: "fail", detail: expect.stringContaining("70001"), fix: "npx weekpost token en" });
+      expect(find(gone.checks, "token.en")).toMatchObject({ level: "fail", detail: expect.stringContaining("70001"), fix: "generate a new token in the Meta dashboard (docs/setup.md, step 4), copy it, then: npx weekpost token en" });
       expect(gone.code).toBe(1);
       const renamed = await greenDoctor((w) => {
         unified()(w);

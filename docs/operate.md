@@ -74,7 +74,7 @@ export default defineConfig({
 - Labels are up to 60 characters and values (text or a finite number) up to 120. A row that breaks a limit or has the wrong type is dropped, and rows after the tenth are cut; each becomes one Attention line.
 - An exception, a rejection, a timeout or a result that is not an array becomes one Attention line. The rest of the report and the exit code are unaffected. The text is cleaned like the rest of the report. The error message is not copied into the report (it may hold data); log with `console.error`, which prints to the terminal or the Action log.
 
-`token` needs a terminal (it refuses to run from an agent shell). Copy the long-lived token from the Meta panel and run `npx weekpost token en`: it reads the clipboard (or a hidden prompt with `--prompt`), confirms on the Graph API that the token belongs to the account's handle and may publish, saves it in `weekpost_tokens` (59 days) and clears the clipboard. It never prints the token.
+`token` needs a terminal (it refuses to run from an agent shell). Copy the token from the Meta dashboard (Generate access tokens, [setup step 4](setup.md#4-create-the-accounts)) and run `npx weekpost token en`. It reads the clipboard (or a hidden prompt with `--prompt`), finds out whether the token is from Unified login or the older Instagram login, confirms on the Graph API that it sees the account's handle and may publish, saves it in `weekpost_tokens` and clears the clipboard. A Unified login token is saved without an expiry (it asks; answer `never`). An Instagram login token is saved for 59 days and the Worker renews it. It never prints the token.
 
 `first-post` checks that your Worker really publishes. After `token`, run `npx weekpost first-post en --caption="Hello"` in a terminal (`--yes` skips the confirmation but never the terminal): it confirms the account handle, renders a plain card with your brand name (no paid API), queues it for about a minute ahead and watches the queue for up to 15 minutes (`--timeout=<minutes>`; the Worker's cron runs every 5 minutes), then prints the permalink. **The post is public on the real account**, so the caption is yours and required (without `--caption` it asks). If it fails, it translates the Worker's error and points to the step in [docs/setup.md](setup.md) to fix. Repeating the command the same day never queues a second post: it finds the existing row and keeps watching it. Delete the post on Instagram when you are done; weekpost does not delete media.
 
@@ -97,9 +97,9 @@ The Worker logs one JSON line per event. In the Cloudflare dashboard, open the W
 
 | Event | What it means | What to do |
 |---|---|---|
-| `ERROR_no_token` | no account has a token | seed the row in `weekpost_tokens` (step 4) |
-| `ERROR_token_expiring` | a token has fewer than 7 days left | check that renewal works; if `ERROR_token_refresh` also shows, generate a new token and update the row |
-| `ERROR_token_refresh` | Meta refused the renewal | the token may be revoked or too new (needs 24 hours); replace it by hand |
+| `ERROR_no_token` | no account has a token | run `npx weekpost token <account>` ([setup](setup.md#6-save-the-token), step 6) |
+| `ERROR_token_expiring` | a token has fewer than 7 days left | Instagram login: check that renewal works; if `ERROR_token_refresh` also shows, generate a new token and run `npx weekpost token <account>`. Unified login: weekpost cannot renew it; generate a new token with the expiry set to **Token will never expire**, then `npx weekpost token <account>` |
+| `ERROR_token_refresh` | Meta refused the renewal | the token may be revoked or too new (needs 24 hours); run `npx weekpost token <account>` with a new token |
 | `ERROR_post` | the database could not record a post's state; the post stays in `publishing` | run `status`, then `resolve` once you know whether it went out |
 | `ERROR_record_published` | the post went live but recording it failed | `resolve --published=<permalink>` with the link from the account |
 | `ERROR_post_stuck_publishing` | a post has been in `publishing` for over 30 minutes | check the account, then `resolve` |

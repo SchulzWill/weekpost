@@ -169,7 +169,7 @@ export async function runToken(args: string[], out: Out = console, cwd = process
   }
   if (!found) {
     if (failures.length > 1 && failures.every((f) => f.error instanceof GraphError && f.error.code === 190)) {
-      out.error("token not accepted by Instagram Login nor Unified login; generate it again in Meta's app dashboard and run this again (nothing was saved)");
+      out.error("token not accepted by Instagram Login nor Unified login; generate it again in Meta's app dashboard (API setup with Unified login, Generate access tokens; docs/setup.md step 4, item 6) and run this again (nothing was saved)");
     } else {
       out.error(`Instagram did not accept the token (${failures.map((f) => `${LOGIN_LABEL[f.login]}: ${safe(f.error)}`).join("; ")}); nothing was saved`);
     }
@@ -203,7 +203,9 @@ export async function runToken(args: string[], out: Out = console, cwd = process
   } catch (e) {
     out.error(
       e instanceof GraphError
-        ? `the token cannot publish (${safe(e)}); generate it again with the ${PUBLISH_PERMISSION[login]} permission and run this again`
+        ? login === "unified"
+          ? `the token cannot publish (${safe(e)}); edit the Unified login configuration's permissions to include ${PUBLISH_PERMISSION.unified}, generate the token again, then run this again`
+          : `the token cannot publish (${safe(e)}); generate it again with the ${PUBLISH_PERMISSION.instagram} permission and run this again`
         : `error: ${safe(e)}`,
     );
     return 1;
@@ -268,7 +270,8 @@ async function identify(graph: InstagramGraph, token: string, accountId: string,
 
 /** Days the token lasts: null for "never", 60, or undefined after three answers that are neither. */
 async function askValidity(choose: (q: string) => Promise<string>): Promise<null | 60 | undefined> {
-  const q = 'How long does this token last? Meta shows it in the configuration preview; weekpost cannot renew a Unified login token, so "never" is the one to pick [never/60 days] (never): ';
+  const q =
+    'How long does this token last? It is the expiry you picked in the Unified login configuration (docs/setup.md, step 4, item 5). weekpost cannot renew a Unified login token, so pick "never" there. If you are not sure, answer 60 days: doctor will warn you before it stops working. [never/60 days] (never): ';
   for (let i = 0; i < 3; i++) {
     const a = (await choose(q)).trim().toLowerCase();
     if (a === "" || a === "never" || a === "n") return null;

@@ -84,7 +84,7 @@ flowchart LR
 | Topic sources for the agent (`sources pull`, `ideasFile`) | available |
 | Agent files for Claude Code and Codex | available; Claude Code is the one tested |
 | Weekly metrics report (`metrics`) | available; the `weekpost-metrics` Action posts it weekly as an issue, and the agent reading it is next |
-| Project upgrade command | not built |
+| Project upgrade (`upgrade --plan`) | plan only: lists what changes; applying is not built |
 | Local image generation (ComfyUI) | not built |
 | Networks other than Instagram | not built |
 
@@ -134,7 +134,7 @@ npx weekpost init
 
 `init` asks for your brand, accounts and pillars, and copies the config, the Worker, the CI workflows and the agent skills into your repo. Then, in Claude Code or Codex, ask your agent to **run the `setup-guide` skill**. It walks you through the accounts and the first post. Prefer to do it yourself? Follow [docs/setup.md](docs/setup.md). A first-timer needs about three hours, most of it creating accounts.
 
-To publish you need a free [Supabase](https://supabase.com) project, a free [Cloudflare](https://www.cloudflare.com) account, a professional (Business or Creator) Instagram account with a Meta app of your own, an [OpenRouter](https://openrouter.ai) key, and the [GitHub CLI](https://cli.github.com).
+To publish you need a free [Supabase](https://supabase.com) project, a free [Cloudflare](https://www.cloudflare.com) account, a professional (Business or Creator) Instagram account in a Meta business portfolio, with a Meta app of your own, an [OpenRouter](https://openrouter.ai) key, and the [GitHub CLI](https://cli.github.com).
 
 ## Documentation
 
@@ -177,7 +177,7 @@ No. Each person creates their own Meta app and uses it on accounts they own or m
 No dates. In rough order:
 
 - The agent reading the weekly metrics issue before it drafts the next week.
-- A command to upgrade a project to a newer weekpost.
+- Applying an upgrade (`upgrade --plan` already lists what changes).
 - Local image generation (ComfyUI) as an alternative to OpenRouter.
 - Networks other than Instagram.
 

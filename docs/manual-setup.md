@@ -2,7 +2,7 @@
 
 This is the same setup as [Set it up](setup.md), done by hand. `npx weekpost setup --apply` does these steps for you: the schema (a connection string typed at a hidden prompt, or `--print` to get the SQL and paste it in the SQL editor yourself), the bucket, the Worker deploy and secrets, the GitHub label, secret and environment, and `~/.config/weekpost/<folder>-<hash>.env` (mode 0600). Every secret goes in on stdin or at a hidden prompt, never as an argument. Use `--only=<step-id>` for one step. The Instagram token is still yours: see step 4 below. Nothing in this repository deploys, writes a secret or creates an account unless you run `--apply` and say yes.
 
-1. **Project.** Install the package from a release tarball (`npm i <url of the weekpost-x.y.z.tgz asset on the release>`; the template ships inside it), then run `npx weekpost init` in your repository. It asks for the brand name, each account (handle, language, time zone, hemisphere), the pillars and the call to action, then copies `weekpost.config.ts`, `assets/`, `content/`, `worker/` and `.github/` and runs `weekpost check`. It stops without writing anything if one of those paths already exists, and names it. Without a terminal (an agent shell, a script), pass the answers as a file: `npx weekpost init --answers=answers.json`.
+1. **Project.** Build the tarball from a clone ([Set it up](setup.md#2-install), step 2) and install it with `npm i /path/to/weekpost-<version>.tgz` (the template ships inside it), then run `npx weekpost init` in your repository. It asks for the brand name, each account (handle, language, time zone, hemisphere), the pillars and the call to action, then copies `weekpost.config.ts`, `assets/`, `content/`, `worker/` and `.github/` and runs `weekpost check`. It stops without writing anything if one of those paths already exists, and names it. Without a terminal (an agent shell, a script), pass the answers as a file: `npx weekpost init --answers=answers.json`.
 
    ```json
    {
@@ -18,23 +18,23 @@ This is the same setup as [Set it up](setup.md), done by hand. `npx weekpost set
    Each account may also set `id`, `voice` and `linkBase` (an `https://` URL); `previewLabel` is optional and is also written into the preview workflow; `contact` (e-mail or URL) goes into `PRIVACY.md`, and without it `<CONTACT>` stays there for you to fill in. The file holds no secret. Then add the font and logo files the config names under `assets/` and run `npx playwright install chromium`. Installing weekpost downloads `ffmpeg-static`, about 44 MB.
 2. **Supabase.** In the SQL editor of your project, run `packages/weekpost/migrations/0001_queue.sql`, `0002_media_hash.sql`, `0003_stale_runs.sql`, `0004_operator_functions.sql`, `0005_metrics.sql` and `0006_token_login.sql` (from this repository), once each, in order. Run `0004` before you deploy the matching version of weekpost: `cancel` and `reschedule` call the functions it adds. `0005` adds the table the Instagram metrics are stored in. `0006` adds the login mode of each token; run it before you deploy, because the Worker reads it. Together they create four tables with the prefix `weekpost_` (`weekpost_posts`, `weekpost_tokens`, `weekpost_schema`, `weekpost_metrics`), the functions the Worker calls, and the grants for the server-side role. Create a **secret key** (`sb_secret_...`) in the API keys page.
 3. **Media bucket.** The first real `enqueue` creates a private bucket named `weekpost-media` (50 MiB per file, JPEG and MP4 only). To use another name, set `WEEKPOST_BUCKET` in the workflow and in the Worker. You can also create the bucket yourself in the dashboard, private.
-4. **Instagram token.** The Worker reads the token from the table, not from a secret, because a renewal returns a new token. Seed one row per account, using the same id as in `weekpost.config.ts` (here `en`) and the numeric id of the Instagram professional account:
+4. **Instagram token.** The easy way: `npx weekpost token <account>`, for either kind of token. By hand, seed one row per account in the SQL editor, using the same id as in `weekpost.config.ts` (here `en`), and never commit the token. The Worker reads the token from the table, not from a secret.
 
-   ```sql
-   insert into public.weekpost_tokens (account, ig_user_id, access_token, expires_at)
-   values ('en', '<numeric account id>', '<long-lived token>', now() + interval '60 days');
-   ```
-
-   Run it in the SQL editor and never commit the token. The Worker renews it when fewer than 30 days are left and logs `ERROR_token_expiring` when fewer than 7 are left.
-
-   That is a token from the older "API setup with Instagram login". For a token from "API setup with Unified login" (the only one new Meta apps offer, see [Set it up](setup.md#4-create-the-accounts)), the account id is the `id` that `GET https://graph.facebook.com/v26.0/me/assigned_instagram_accounts?fields=id,username` returns for your handle, and the row has no expiry and is never renewed:
+   For a token from "API setup with Unified login" (what new Meta apps offer, see [Set it up](setup.md#4-create-the-accounts)), the account id is the `id` that `GET https://graph.facebook.com/v26.0/me/assigned_instagram_accounts?fields=id,username` returns for your handle. The row has no expiry and is never renewed:
 
    ```sql
    insert into public.weekpost_tokens (account, ig_user_id, access_token, expires_at, login)
    values ('en', '<numeric account id>', '<system-user token>', null, 'unified');
    ```
 
-   `npx weekpost token <account>` does all of this for you, for either kind of token.
+   Older apps with "API setup with Instagram login" use the numeric id of the Instagram professional account:
+
+   ```sql
+   insert into public.weekpost_tokens (account, ig_user_id, access_token, expires_at)
+   values ('en', '<numeric account id>', '<long-lived token>', now() + interval '60 days');
+   ```
+
+   The Worker renews that token when fewer than 30 days are left and logs `ERROR_token_expiring` when fewer than 7 are left.
 5. **Worker.** In `worker/`, set the two secrets and deploy it yourself:
 
    ```sh
