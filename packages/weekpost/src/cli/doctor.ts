@@ -103,9 +103,11 @@ async function tokenChecks(ctx: SetupContext, deps: DoctorDeps, now: Date): Prom
   for (const a of ctx.accounts) {
     const id = `token.${a.id}`;
     const fix = `npx weekpost token ${a.id}`;
+    // Most token problems need a new token from Meta first; steps.ts says the same.
+    const newToken = `generate a new token in the Meta dashboard (docs/setup.md, step 4), copy it, then: ${fix}`;
     const row = tokens.find((t) => t.account === a.id);
     if (!row) {
-      out.push({ id, level: "fail", detail: `no token saved for @${a.handle}`, fix });
+      out.push({ id, level: "fail", detail: `no token saved for @${a.handle}`, fix: newToken });
       continue;
     }
     const login = row.login ?? "instagram";
@@ -117,23 +119,23 @@ async function tokenChecks(ctx: SetupContext, deps: DoctorDeps, now: Date): Prom
     const days = row.expiresAt === null ? Infinity : Math.floor((Date.parse(row.expiresAt) - now.getTime()) / DAY);
     const owner = await tokenOwner(graph, secret, row.igUserId, a.handle).catch((e: unknown) => ({ error: `Instagram did not accept the saved token: ${safe(e)}` }));
     if ("error" in owner) {
-      out.push({ id, level: "fail", detail: owner.error, fix });
+      out.push({ id, level: "fail", detail: owner.error, fix: newToken });
       continue;
     }
     try {
       await graph.publishingLimit(owner.userId, secret);
     } catch (e) {
-      out.push({ id, level: "fail", detail: e instanceof GraphError ? `the token cannot publish: ${safe(e)}` : "could not check publishing permission", fix });
+      out.push({ id, level: "fail", detail: e instanceof GraphError ? `the token cannot publish: ${safe(e)}` : "could not check publishing permission", fix: newToken });
       continue;
     }
     if (days < 0 || (login === "instagram" && !(days > MIN_TOKEN_DAYS))) {
-      out.push({ id, level: "fail", detail: days < 0 ? "the saved token has expired" : `the saved token expires in ${days} day(s)`, fix });
+      out.push({ id, level: "fail", detail: days < 0 ? "the saved token has expired" : `the saved token expires in ${days} day(s)`, fix: newToken });
       continue;
     }
     const left = Number.isFinite(days) ? `${days} days left` : "does not expire";
     if (login === "unified" && days <= UNIFIED_WARN_DAYS) {
       // weekpost cannot renew a Unified login token: it only stops working, so the warning comes early.
-      out.push({ id, level: "warn", detail: `@${a.handle}: token works, can publish, ${days} day(s) left; it was generated with a 60-day expiry, which weekpost cannot renew. Regenerate it with the expiry set to never`, fix });
+      out.push({ id, level: "warn", detail: `@${a.handle}: token works, can publish, ${days} day(s) left; it was generated with a 60-day expiry, which weekpost cannot renew. Regenerate it with the expiry set to never (Unified login configuration, docs/setup.md step 4, item 5)`, fix: newToken });
     } else {
       out.push({ id, level: "ok", detail: `@${a.handle}: token works, can publish, ${left}` });
     }
@@ -163,7 +165,7 @@ function insightsWarning(id: string, login: LoginMode, fix: string): Check {
   const detail = `the token cannot read Insights; \`weekpost metrics\` needs \`${INSIGHTS_PERMISSION[login]}\` (posts still publish)`;
   return login === "unified"
     ? { id: `${id}.insights`, level: "warn", detail, fix: `add ${INSIGHTS_PERMISSION.unified} to the Unified login configuration, generate the token again, then: ${fix}` }
-    : { id: `${id}.insights`, level: "warn", detail, fix: `generate the token again with all three permissions (setup step 4, item 5), then: ${fix}` };
+    : { id: `${id}.insights`, level: "warn", detail, fix: `generate the token again with all three permissions (docs/setup.md, step 4, "Older apps"), then: ${fix}` };
 }
 
 /** Workflow `uses:` lines that name a tag or branch instead of a full commit SHA. */

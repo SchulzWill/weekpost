@@ -72,7 +72,7 @@ export async function runMetrics(args: string[], out: Out = console, cwd = proce
 
   try {
     const db = deps.db ?? supabaseDb(env.WEEKPOST_SUPABASE_URL ?? "", env.WEEKPOST_SUPABASE_KEY ?? "", fetchFn);
-    const collected = await collectMetrics({ db, graph: new InstagramGraph(fetchFn), now });
+    const collected = await collectMetrics({ db, graph: (login) => new InstagramGraph(fetchFn, GRAPH_API_VERSION, login), now });
     const [weekStart, weekEnd] = weekBounds(now);
     const { extra, extraError, extraWarnings } = await extraNumbers(deps.config, projectPaths(args, cwd).projectRoot, env, now, collected.accounts);
     const input: ReportInput = {

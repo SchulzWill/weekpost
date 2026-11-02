@@ -138,7 +138,7 @@ describe("weekpost token", () => {
     const t = setup({ insightsStatus: 400 });
     expect(await runToken(["a"], t.out, "/x", t.deps)).toBe(0);
     expect(t.saved).toHaveLength(1);
-    expect(t.lines).toContain("warning: the token for `a` cannot read Insights, so `weekpost metrics` will have no numbers (posts still publish). Generate it again in Meta's \"API setup with Instagram login\" with all three permissions (setup step 4, item 5), then run `npx weekpost token a`.");
+    expect(t.lines).toContain("warning: the token for `a` cannot read Insights, so `weekpost metrics` will have no numbers (posts still publish). Generate it again in Meta's \"API setup with Instagram login\" with all three permissions (docs/setup.md, step 4, \"Older apps\"), then run `npx weekpost token a`.");
     expectNoSecret(t.lines);
   });
 
@@ -334,7 +334,7 @@ describe("weekpost token: login mode", () => {
   it("names the Unified login permissions in its messages", async () => {
     const t = unified({ limitStatus: 403 });
     expect(await runToken(["a"], t.out, "/x", t.deps)).toBe(1);
-    expect(t.lines.join("\n")).toContain("instagram_content_publish permission");
+    expect(t.lines.join("\n")).toContain("permissions to include instagram_content_publish");
     expect(t.lines.join("\n")).not.toContain("instagram_business_");
     const u = unified({ insightsStatus: 400 });
     expect(await runToken(["a"], u.out, "/x", u.deps)).toBe(0);

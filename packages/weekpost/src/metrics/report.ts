@@ -3,6 +3,7 @@
 // part that matters when a number is missing or the queue needs a hand: one line per item, each with the command that
 // fixes it. Text that comes from outside (a post's last_error, the hook, Meta's messages) goes through `clean()`.
 import type { VersionStatus } from "../setup/graphVersions.ts";
+import { insightsFix } from "./access.ts";
 import type { Collected, CollectIssue } from "./collect.ts";
 import type { Key, MetricRow, QueueRow, Token } from "../queue/types.ts";
 
@@ -81,7 +82,7 @@ function accountSection(rows: MetricRow[], accounts: string[]): string[] {
     "|---|---:|---:|---:|---:|---:|---:|---:|",
     ...(lines.length ? lines : ["| — | no account with a token | — | — | — | — | — | — |"]),
     "",
-    "Contact taps are `profile_links_taps` (address, call, e-mail, SMS); link taps are `website_clicks`, the taps on the link in the profile. `—` means Meta did not return the number.",
+    "Contact taps are `profile_links_taps` (address, call, e-mail, SMS); link taps are `website_clicks`, the taps on the link in the profile. `—` means Meta did not return the number; on a Unified login token weekpost does not ask for profile views and link taps.",
     "",
   ];
 }
@@ -146,7 +147,7 @@ export function attentionLines(i: ReportInput): string[] {
     }
   }
   for (const m of i.collected.issues.filter((x) => x.kind === "no-permission")) {
-    out.push(`- **The token for \`${clean(m.account)}\` cannot read Insights**, so \`weekpost metrics\` will have no numbers (posts still publish). Generate it again in Meta's "API setup with Instagram login" with all three permissions (setup step 4, item 5), then run \`npx weekpost token ${clean(m.account)}\`.`);
+    out.push(`- **The token for \`${clean(m.account)}\` cannot read Insights**, so \`weekpost metrics\` will have no numbers (posts still publish). ${insightsFix(clean(m.account), m.login)}`);
   }
   for (const m of i.collected.issues.filter((x) => x.kind === "token")) {
     out.push(`- **Meta rejected the token of \`${clean(m.account)}\`:** ${clean(m.detail)}. Run \`npx weekpost token ${clean(m.account)}\`.`);
