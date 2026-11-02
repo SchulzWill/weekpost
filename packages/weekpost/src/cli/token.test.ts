@@ -8,7 +8,7 @@ const KEY = "sb_secret_SENTINEL_service_key_123";
 const NOW = new Date("2026-10-30T12:00:00Z");
 const config = testConfig();
 
-type Upsert = { account: string; igUserId: string; accessToken: string; expiresAt: string };
+type Upsert = { account: string; igUserId: string; accessToken: string; expiresAt: string | null };
 
 function setup(over: { me?: unknown; meStatus?: number; limitStatus?: number; insightsStatus?: number; clip?: string; typed?: string; upsertFails?: boolean } = {}) {
   const lines: string[] = [];
@@ -188,6 +188,11 @@ describe("supabase upsertToken", () => {
     expect(calls[0]!.url).toBe("https://x.supabase.co/rest/v1/weekpost_tokens?on_conflict=account");
     expect((calls[0]!.init.headers as Record<string, string>).prefer).toContain("merge-duplicates");
     expect(JSON.parse(String(calls[0]!.init.body))).toMatchObject({ account: "a", ig_user_id: "90001", access_token: SENTINEL });
+
+    expect(JSON.parse(String(calls[0]!.init.body)).login).toBe("instagram"); // default for callers that do not say
+
+    await supabaseDb("https://x.supabase.co", KEY, ok).upsertToken({ account: "a", igUserId: "90001", accessToken: SENTINEL, expiresAt: null, login: "unified" });
+    expect(JSON.parse(String(calls[1]!.init.body))).toMatchObject({ login: "unified", expires_at: null });
 
     const bad = (async () => new Response(JSON.stringify({ message: `x ${SENTINEL}` }), { status: 400 })) as unknown as typeof fetch;
     const err = await supabaseDb("https://x.supabase.co", KEY, bad).upsertToken({ account: "a", igUserId: "1", accessToken: SENTINEL, expiresAt: "x" }).catch((e: Error) => e);

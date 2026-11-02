@@ -161,10 +161,11 @@ export function supabaseDb(url: string, key: string, fetchFn: Fetch = fetch): Db
       });
     },
     async tokens() {
-      const rows = (await req("/rest/v1/weekpost_tokens?select=account,ig_user_id,access_token,expires_at,refreshed_at")) as Raw[];
+      const rows = (await req("/rest/v1/weekpost_tokens?select=account,ig_user_id,access_token,expires_at,refreshed_at,login")) as Raw[];
       return rows.map((r): Token => ({
         account: r.account as string, igUserId: r.ig_user_id as string, accessToken: r.access_token as string,
-        expiresAt: r.expires_at as string, refreshedAt: r.refreshed_at as string,
+        expiresAt: (r.expires_at as string | null) ?? null, refreshedAt: r.refreshed_at as string,
+        login: r.login === "unified" ? "unified" : "instagram",
       }));
     },
     async saveToken(account, expectedRefreshedAt, accessToken, expiresAt) {
@@ -298,7 +299,7 @@ export function supabaseDb(url: string, key: string, fetchFn: Fetch = fetch): Db
         "/rest/v1/weekpost_tokens?on_conflict=account",
         {
           method: "POST", headers: { prefer: "resolution=merge-duplicates,return=minimal" },
-          body: JSON.stringify({ account: t.account, ig_user_id: t.igUserId, access_token: t.accessToken, expires_at: t.expiresAt, refreshed_at: now, updated_at: now }),
+          body: JSON.stringify({ account: t.account, ig_user_id: t.igUserId, access_token: t.accessToken, expires_at: t.expiresAt, login: t.login ?? "instagram", refreshed_at: now, updated_at: now }),
         },
         { secrets: [t.accessToken], omitBody: true },
       );

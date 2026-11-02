@@ -108,7 +108,7 @@ async function tokenChecks(ctx: SetupContext, deps: DoctorDeps, now: Date): Prom
     }
     const secret = row.accessToken;
     const safe = (e: unknown) => redact(String((e as Error)?.message ?? e), secret).slice(0, 200);
-    const days = Math.floor((Date.parse(row.expiresAt) - now.getTime()) / DAY);
+    const days = row.expiresAt === null ? Infinity : Math.floor((Date.parse(row.expiresAt) - now.getTime()) / DAY);
     let me: { userId: string; username: string };
     try {
       me = await graph.me(secret);
@@ -130,7 +130,7 @@ async function tokenChecks(ctx: SetupContext, deps: DoctorDeps, now: Date): Prom
       out.push({ id, level: "fail", detail: days < 0 ? "the saved token has expired" : `the saved token expires in ${days} day(s)`, fix });
       continue;
     }
-    out.push({ id, level: "ok", detail: `@${a.handle}: token works, can publish, ${days} days left` });
+    out.push({ id, level: "ok", detail: `@${a.handle}: token works, can publish, ${Number.isFinite(days) ? `${days} days left` : "no expiry"}` });
     // A warning, never a failure: publishing works without the Insights permission.
     if ((await insightsAccess(graph, me.userId, secret, now)) === "missing") out.push({ id: `${id}.insights`, level: "warn", detail: "the token cannot read Insights; `weekpost metrics` needs `instagram_business_manage_insights` (posts still publish)", fix: `generate the token again with all three permissions (setup step 4, item 5), then: ${fix}` });
   }
