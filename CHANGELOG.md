@@ -8,6 +8,16 @@ How a release is cut: see [Releasing](docs/releasing.md).
 
 ### You need to do
 
+(none yet)
+
+### Improvements
+
+(none yet)
+
+## 0.1.0 - 2026-11-05
+
+### You need to do
+
 - Run migration `0005_metrics.sql` (`npx weekpost setup --apply --only=db.migrate`). It only adds a table, so the previous Worker keeps running.
 - Run migration `0006_token_login.sql` too (same command, run it before you deploy this version: the Worker reads the new column). It adds a `login` column to `weekpost_tokens` (existing tokens stay `instagram`) and lets `expires_at` be empty, so the previous Worker keeps running.
 - To use `weekpost metrics`, generate a NEW token in the Meta panel with the `instagram_business_manage_insights` permission added, then run `npx weekpost token <account>`. Tokens made before this release lack it. Publishing works without this step.
