@@ -121,13 +121,11 @@ Identical prompts and inputs come from the cache, so re-running a week costs not
 
 ## Use it in your project
 
-There is no release and no npm package yet; the first release is coming. The path that works today builds the package from a clone:
+Install weekpost from npm in your own repository:
 
 ```sh
-git clone https://github.com/SchulzWill/weekpost.git
-cd weekpost/packages/weekpost && npm pack     # writes weekpost-<version>.tgz here
 cd /path/to/your-repo
-npm i /path/to/weekpost/packages/weekpost/weekpost-<version>.tgz
+npm i -D weekpost
 npx playwright install chromium
 npx weekpost init
 ```

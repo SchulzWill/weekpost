@@ -8,3 +8,7 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    ignore:
+      # Node types follow the Node 22 floor in `engines`, so skip major bumps.
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]

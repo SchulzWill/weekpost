@@ -22,5 +22,6 @@ describe("npm pack", () => {
       "worker/index.ts",
       "bin/weekpost.js",
     ]) has(p);
+    expect(files.filter((f) => /\.test\.ts$|(^|\/)fixtures(\.ts|\/)/.test(f)), "test files and fixtures").toEqual([]);
   }, 60_000);
 });

@@ -27,19 +27,14 @@ Use an OpenRouter key with a credit limit. `weekpost doctor` warns when the key 
 
 ### 2. Install
 
-weekpost ships as a tarball; the template that `init` copies is inside it. There is no release yet, so build the tarball from a clone of this repository first (this is the path that works today; a release will add a download URL):
-
-```sh
-git clone https://github.com/SchulzWill/weekpost.git
-(cd weekpost/packages/weekpost && npm pack --pack-destination ..)   # writes weekpost/weekpost-<version>.tgz
-```
+weekpost is a npm package; the template that `init` copies is inside it. Nothing to download or build.
 
 `npx weekpost --version` prints the installed version, and [CHANGELOG.md](../CHANGELOG.md) lists what each release changes.
 
 ```sh
 mkdir my-brand-social && cd my-brand-social
 git init && npm init -y
-npm i /path/to/weekpost/weekpost-<version>.tgz
+npm i -D weekpost
 npx playwright install chromium
 ```
 

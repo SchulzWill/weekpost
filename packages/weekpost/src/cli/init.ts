@@ -180,7 +180,7 @@ export async function runInit(args: string[], out: Out = console, cwd = process.
       "",
       checked === 0 ? "The config is valid." : "The check above lists what is left to fix. A new project is missing the font and logo files the config names under assets/. If it says it cannot find module 'weekpost', install weekpost in this directory first.",
       `PRIVACY.md is a generic policy${answers.contact?.trim() ? "" : " (fill in <CONTACT>)"}: read it, publish it on a public page and give Meta that URL (docs/setup.md, step 4).`,
-      "Next: edit weekpost.config.ts (brand colors, font, logo, and link.base if you kept the placeholder), then install weekpost in this directory (npm i <the release tarball>) and run `npx playwright install chromium`.",
+      "Next: edit weekpost.config.ts (brand colors, font, logo, and link.base if you kept the placeholder), then install weekpost in this directory (npm i -D weekpost) and run `npx playwright install chromium`.",
       "Heads up: installing weekpost downloads ffmpeg-static, about 44 MB.",
     ].join("\n"),
   );

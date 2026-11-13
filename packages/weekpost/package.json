@@ -29,14 +29,17 @@
     "./worker": "./worker/index.ts"
   },
   "bin": {
-    "weekpost": "./bin/weekpost.js"
+    "weekpost": "bin/weekpost.js"
   },
   "files": [
     "bin",
     "migrations",
     "src",
     "template",
-    "worker"
+    "worker",
+    "!**/*.test.ts",
+    "!src/content/fixtures.ts",
+    "!src/eval/fixtures"
   ],
   "engines": {
     "node": ">=22"
