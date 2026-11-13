@@ -27,7 +27,7 @@ Use an OpenRouter key with a credit limit. `weekpost doctor` warns when the key 
 
 ### 2. Install
 
-weekpost is a npm package; the template that `init` copies is inside it. Nothing to download or build.
+weekpost is an npm package; the template that `init` copies is inside it. Nothing to download or build.
 
 `npx weekpost --version` prints the installed version, and [CHANGELOG.md](../CHANGELOG.md) lists what each release changes.
 
