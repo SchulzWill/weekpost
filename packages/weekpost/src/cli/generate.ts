@@ -124,7 +124,7 @@ export async function runGenerate(args: string[], out: Out = console, cwd = proc
     for (const acc of accountsOf(post)) {
       const out = join(outDir, post.id, acc, "story.jpg");
       await render(storyHtml(brand, post.story, acc, img ? pathToFileURL(img).href : undefined), out, { width: 1080, height: 1920 });
-      entry.accounts[acc] = { files: [rel(out)], publish: [rel(out)], sha256: pin([rel(out)]), caption: `${post.story.text[acc] ?? ""}\n\n[Link sticker, added when publishing: ${post.link[acc] ?? ""}]` };
+      entry.accounts[acc] = { files: [rel(out)], publish: [rel(out)], sha256: pin([rel(out)]), caption: `${post.story.text[acc] ?? ""}\n\n[Link sticker, added when publishing: ${post.link?.[acc] ?? ""}]` };
     }
   }
 

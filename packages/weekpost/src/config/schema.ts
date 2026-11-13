@@ -121,6 +121,20 @@ export const configSchema = z.strictObject({
   sources: z.array(z.custom<SourceAdapter>((s) => typeof s === "object" && s !== null && typeof (s as { name?: unknown }).name === "string" && typeof (s as { pull?: unknown }).pull === "function", "a source must be an object with a name and a pull() function")).optional(),
   // Optional; `metrics.extra` is off unless set.
   metrics: metrics.optional(),
+  // stories.publish: how a Story is published when the post has no `story.publish` ("manual" by default, so a project without this block keeps working as before).
+  // stories.fallbackAfterMinutes: minutes after the Story's time at which a manual Story is published automatically if nobody did it; null = never.
+  stories: z
+    .strictObject({
+      publish: z.enum(["auto", "manual"], { error: 'stories.publish: use "auto" or "manual"' }).default("manual"),
+      fallbackAfterMinutes: z
+        .number({ error: "stories.fallbackAfterMinutes: use a whole number of minutes from 15 to 1380, or null for no fallback" })
+        .int("stories.fallbackAfterMinutes: use a whole number of minutes from 15 to 1380, or null for no fallback")
+        .min(15, "stories.fallbackAfterMinutes: use at least 15 minutes, or null for no fallback")
+        .max(1380, "stories.fallbackAfterMinutes: use at most 1380 minutes (23 h), so the fallback runs before the day ends")
+        .nullable()
+        .default(null),
+    })
+    .default({ publish: "manual", fallbackAfterMinutes: null }),
   lint: z.strictObject({ plugins: z.array(z.custom<LintPlugin>((p) => typeof p === "object" && p !== null && typeof (p as { name?: unknown }).name === "string", "plugin must be an object with a name")) }).default({ plugins: [] }),
 });
 

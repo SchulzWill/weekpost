@@ -64,6 +64,17 @@ describe("parseConfig: valid input", () => {
     expect(config.lint.plugins).toEqual([]);
   });
 
+  it("defaults stories to manual with no fallback, and accepts the documented range", () => {
+    expect(parseConfig(valid()).config.stories).toEqual({ publish: "manual", fallbackAfterMinutes: null });
+    for (const m of [15, 1380, null]) expect(issuesFor((c) => (c.stories = { fallbackAfterMinutes: m }))).toEqual([]);
+    expect(parseConfig({ ...valid(), stories: { publish: "auto" } }).config.stories).toEqual({ publish: "auto", fallbackAfterMinutes: null });
+  });
+
+  it("rejects stories.fallbackAfterMinutes outside 15..1380, and a bad stories.publish", () => {
+    for (const m of [14, 1381, 20.5]) expect(issuesFor((c) => (c.stories = { fallbackAfterMinutes: m })).join("\n")).toMatch(/stories\.fallbackAfterMinutes/);
+    expect(issuesFor((c) => (c.stories = { publish: "now" })).join("\n")).toMatch(/stories\.publish/);
+  });
+
   it("leaves sources undefined, and accepts adapters (objects with name and pull)", () => {
     expect(parseConfig(valid()).config.sources).toBeUndefined();
     const adapter = { name: "x", pull: async () => [] };
