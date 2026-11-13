@@ -1,0 +1,45 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`storyHtml without a CTA > keeps the exact markup, with the free sticker strip 1`] = `
+"<!doctype html><html lang="pt-PT"><head><meta charset="utf-8"><style>
+@font-face{font-family:"Test Sans";font-weight:400;src:url("file:///brand-assets") format("woff2")}@font-face{font-family:"Test Sans";font-weight:800;src:url("file:///brand-assets") format("woff2")}
+*{box-sizing:border-box;margin:0}
+html,body{width:1080px;height:1920px;overflow:hidden}
+body{font-family:"Test Sans",sans-serif;background:#173A20;color:#fff;-webkit-font-smoothing:antialiased;display:flex;flex-direction:column;padding:180px 80px 0}
+.lockup svg,.lockup img{height:52px;width:auto;display:block}
+.photo{position:relative;margin-top:64px;height:760px;border-radius:36px;background:#5B6157 url("file:///i.png") center/cover no-repeat}
+p{margin-top:64px;font-size:64px;font-weight:800;line-height:1.08;letter-spacing:-.02em;color:#E6F2E3;text-wrap:balance}
+/* Link sticker strip: 420 px left free at the bottom (outside the Instagram UI). */
+.sticker-zone{margin-top:auto;height:420px}
+</style></head><body>
+<div class="lockup"><svg role="img" aria-label="Horta Viva" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 40">
+  <circle cx="20" cy="20" r="16" fill="#E6F2E3"/>
+  <text x="46" y="29" font-family="sans-serif" font-size="28" font-weight="800" fill="#FFFFFF">Horta Viva</text>
+</svg></div>
+<div class="photo" role="img" aria-label="Illustrative image"></div>
+<p>Vagas no beta.</p>
+<div class="sticker-zone"></div>
+</body></html>"
+`;
+
+exports[`storyHtml without a CTA > keeps the exact markup, with the free sticker strip 2`] = `
+"<!doctype html><html lang="pt-PT"><head><meta charset="utf-8"><style>
+@font-face{font-family:"Test Sans";font-weight:400;src:url("file:///brand-assets") format("woff2")}@font-face{font-family:"Test Sans";font-weight:800;src:url("file:///brand-assets") format("woff2")}
+*{box-sizing:border-box;margin:0}
+html,body{width:1080px;height:1920px;overflow:hidden}
+body{font-family:"Test Sans",sans-serif;background:#173A20;color:#fff;-webkit-font-smoothing:antialiased;display:flex;flex-direction:column;padding:180px 80px 0}
+.lockup svg,.lockup img{height:52px;width:auto;display:block}
+.photo{position:relative;margin-top:64px;height:760px;border-radius:36px;background:#5B6157 url("") center/cover no-repeat}
+p{margin-top:64px;font-size:64px;font-weight:800;line-height:1.08;letter-spacing:-.02em;color:#E6F2E3;text-wrap:balance}
+/* Link sticker strip: 420 px left free at the bottom (outside the Instagram UI). */
+.sticker-zone{margin-top:auto;height:420px}
+</style></head><body>
+<div class="lockup"><svg role="img" aria-label="Horta Viva" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 40">
+  <circle cx="20" cy="20" r="16" fill="#E6F2E3"/>
+  <text x="46" y="29" font-family="sans-serif" font-size="28" font-weight="800" fill="#FFFFFF">Horta Viva</text>
+</svg></div>
+
+<p>Vagas no beta.</p>
+<div class="sticker-zone"></div>
+</body></html>"
+`;
