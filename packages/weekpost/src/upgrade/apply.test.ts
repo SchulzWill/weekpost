@@ -7,6 +7,7 @@ import { runUpgrade, type UpgradeDeps } from "../cli/upgrade.ts";
 import type { RunResult, Runner } from "../setup/runner.ts";
 import { buildLock, renderTemplate, serializeLock, sha256, TEMPLATE_DIR, type Answers } from "../setup/template.ts";
 import type { Actions } from "../setup/apply.ts";
+import { remoteActions } from "../setup/remote.ts";
 import type { Choice } from "./apply.ts";
 
 const dirs: string[] = [];
@@ -420,5 +421,92 @@ describe("weekpost upgrade --apply: prompts and wording", () => {
     const t = setup(dir, v2);
     expect(await t.run(["--plan"])).toBe(1);
     expect(t.lines.join("\n")).toMatch(/weekpost is not installed in this project; run `npm i -D weekpost` here first/);
+  });
+});
+
+describe("weekpost upgrade --apply: the pending Worker deploy", () => {
+  const declineDeploy = async (dir: string, v2: string) => {
+    const first = setup(dir, v2, { yes: false });
+    expect(await first.run(["--apply"])).toBe(0);
+    expect(first.lines.join("\n")).toMatch(/The upgrade is applied, except for the Worker deploy/);
+    expect(JSON.parse(read(dir, "weekpost.lock.json")).deployPending).toBe(true);
+    commit(dir);
+  };
+
+  it("`setup --apply --only=worker.deploy` clears the flag after a successful deploy, and only then", async () => {
+    const { v1, v2 } = templates();
+    const dir = project(v1);
+    await declineDeploy(dir, v2);
+    const ok = async () => ({ status: 0, stdout: "", stderr: "" });
+    const io = (run: typeof ok) => ({ out: { log() {}, error() {} }, context: () => ({ projectRoot: dir, run }) }) as never;
+    const deploy = remoteActions["worker.deploy"]!;
+    await expect(deploy(io(async () => ({ status: 1, stdout: "", stderr: "" })), {} as never)).rejects.toThrow();
+    expect(JSON.parse(read(dir, "weekpost.lock.json")).deployPending).toBe(true);
+    await deploy(io(ok), {} as never);
+    expect("deployPending" in JSON.parse(read(dir, "weekpost.lock.json"))).toBe(false);
+  });
+
+  it("keeps the flag and offers the deploy again when a file diverges later (declined deploy, then a new template)", async () => {
+    const { v1, v2 } = templates();
+    const dir = project(v1);
+    await declineDeploy(dir, v2);
+    const v3 = join(dirname(v2), "v3");
+    for (const f of FILES) put(v3, f, `${f} v3\n`);
+    put(dir, "AGENTS.md", "edited\n");
+    commit(dir);
+    expect(await setup(dir, v3, { yes: false, choices: { "AGENTS.md": "take" } }).run(["--apply"])).toBe(0);
+    expect(JSON.parse(read(dir, "weekpost.lock.json")).deployPending).toBe(true);
+    const again = setup(dir, v3, { yes: true });
+    commit(dir);
+    expect(await again.run(["--apply"])).toBe(0);
+    expect(again.calls).toEqual(["worker.deploy", "deployed"]);
+    expect("deployPending" in JSON.parse(read(dir, "weekpost.lock.json"))).toBe(false);
+  });
+
+  it("offers the deploy in the same run as a file change", async () => {
+    const { v1, v2 } = templates();
+    const dir = project(v1);
+    await declineDeploy(dir, v2);
+    const v3 = join(dirname(v2), "v3");
+    for (const f of FILES) put(v3, f, `${f} v3\n`);
+    const t = setup(dir, v3, { yes: true });
+    expect(await t.run(["--apply"])).toBe(0);
+    expect(t.calls).toContain("deployed");
+    expect("deployPending" in JSON.parse(read(dir, "weekpost.lock.json"))).toBe(false);
+  });
+
+  it("after the pending deploy goes out, says to commit the lock; when declined it does not say Done", async () => {
+    const { v1, v2 } = templates();
+    const dir = project(v1);
+    await declineDeploy(dir, v2);
+    const no = setup(dir, v2, { yes: false });
+    expect(await no.run(["--apply"])).toBe(0);
+    expect(no.lines.join("\n")).not.toMatch(/Done/);
+    const yes = setup(dir, v2, { yes: true });
+    expect(await yes.run(["--apply"])).toBe(0);
+    expect(yes.lines.join("\n")).toMatch(/Done\. Commit weekpost\.lock\.json\./);
+  });
+
+  it("--plan names the pending deploy on its own when no file or migration differs", async () => {
+    const { v1, v2 } = templates();
+    const dir = project(v1);
+    await declineDeploy(dir, v2);
+    const t = setup(dir, v2);
+    expect(await t.run(["--plan"])).toBe(0);
+    const text = t.lines.join("\n");
+    expect(text).toMatch(/the Worker was not deployed after the last upgrade: run `weekpost upgrade --apply` or `weekpost setup --apply --only=worker.deploy`/);
+    expect(text).not.toMatch(/0 file\(s\)/);
+  });
+
+  it("blocks a lock key that names .GIT in any case", async () => {
+    const { v1, v2 } = templates();
+    const dir = project(v1);
+    const lock = JSON.parse(read(dir, "weekpost.lock.json"));
+    lock.files[".GIT/config"] = "x";
+    writeFileSync(join(dir, "weekpost.lock.json"), serializeLock(lock));
+    commit(dir);
+    const t = setup(dir, v2);
+    expect(await t.run(["--apply"])).toBe(1);
+    expect(t.lines.join("\n")).toMatch(/inside \.git/);
   });
 });

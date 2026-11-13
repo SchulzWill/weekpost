@@ -109,7 +109,7 @@ export function badKey(path: string): string | null {
   if (path === "" || isAbsolute(path) || /^[A-Za-z]:/.test(path) || path.startsWith("/")) return "is an absolute path";
   const parts = path.split(/[\\/]/);
   if (parts.includes("..")) return 'has a ".." in it';
-  if (parts[0] === ".git") return "is inside .git";
+  if (parts[0]!.toLowerCase() === ".git") return "is inside .git";
   return null;
 }
 

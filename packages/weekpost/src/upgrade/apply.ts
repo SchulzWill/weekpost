@@ -137,6 +137,8 @@ export async function applyUpgrade(projectRoot: string, out: Out, deps: ApplyUpg
   };
 
   /** Offers the Worker deploy. Returns 0 when it went out (or needs nothing), 1 when it failed; says so when you decline. */
+  let deployed = false;
+  let declinedDeploy = false;
   const deploy = async (files: Record<string, string>): Promise<number> => {
     let declined = false;
     const code = await steps(ctx, out, async (q) => {
@@ -149,10 +151,12 @@ export async function applyUpgrade(projectRoot: string, out: Out, deps: ApplyUpg
       return 1;
     }
     if (declined) {
+      declinedDeploy = true;
       out.log("\nThe Worker was not deployed and still runs the old version. Deploy it before the next scheduled post: `weekpost setup --apply --only=worker.deploy`. `weekpost upgrade --apply` offers it again until you do.");
       return 0;
     }
     writeLock(files, false);
+    deployed = true;
     return 0;
   };
 
@@ -160,7 +164,7 @@ export async function applyUpgrade(projectRoot: string, out: Out, deps: ApplyUpg
     if (plan.deployPending) {
       out.log(`The files and the lock are already on weekpost ${installed}, but the Worker was never deployed with it.`);
       const code = await deploy({ ...lock?.files });
-      if (code === 0) out.log("Done.");
+      if (code === 0 && deployed) out.log("Done. Commit weekpost.lock.json.");
       return code;
     }
     if (plan.blocked) {
@@ -257,7 +261,7 @@ export async function applyUpgrade(projectRoot: string, out: Out, deps: ApplyUpg
 
     // 3. The lock, last, so an interrupted run is simply run again.
     const versionChanged = plan.lockVersion !== installed;
-    writeLock(lockFiles, versionChanged);
+    writeLock(lockFiles, versionChanged || plan.deployPending);
     out.log(`\nStep 3 of 4: updated ${LOCK_FILE} to weekpost ${installed}`);
   } catch (e) {
     if (e instanceof Stopped || (e as Error).name === "AbortError") throw e;
@@ -266,14 +270,14 @@ export async function applyUpgrade(projectRoot: string, out: Out, deps: ApplyUpg
   }
 
   // The Worker: only when the version changed, and only if you say yes.
-  if (plan.lockVersion !== installed) {
+  if (plan.lockVersion !== installed || plan.deployPending) {
     out.log("\nStep 4 of 4: Worker\nThis deploys the files in worker/ as they are on disk now (not yet committed) to your live Worker. Scheduled posts use it from the next run. To undo, redeploy the previous commit.");
     const code = await deploy(lockFiles);
     if (code !== 0) return 1;
   }
 
-  out.log("\nDone.");
+  out.log(declinedDeploy ? "\nThe upgrade is applied, except for the Worker deploy." : "\nDone.");
   if (plan.steps?.length) out.log(`Setup steps still to do: ${plan.steps.map((s) => s.id).join(", ")} (see \`weekpost setup --plan\`).`);
-  out.log("Next: review the changes with `git status` and `git diff` (`git checkout -- <file>` undoes a file), merge and delete any *.weekpost-new file, then commit and open a pull request.");
+  out.log("Next: review the changes with `git status` and `git diff` (`git checkout -- <file>` undoes a file), merge and delete any *.weekpost-new* file, then commit and open a pull request.");
   return 0;
 }

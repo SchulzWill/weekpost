@@ -68,7 +68,8 @@ export function renderUpgradePlan(plan: UpgradePlan, out: Out): void {
     out.log(`\nAlready on ${plan.installed} (the lock matches the installed version); nothing to upgrade.`);
   } else if (plan.lockVersion === plan.installed) {
     const n = plan.toChange + (plan.migrations?.pending.length ?? 0);
-    out.log(`\nThe lock is already on ${plan.installed}, but ${n} file(s) or migration(s) differ${plan.deployPending ? " and the Worker was never deployed with this version" : ""}; \`weekpost upgrade --apply\` will fix them.`);
+    if (n === 0) out.log(`\nThe lock is already on ${plan.installed}, but the Worker was not deployed after the last upgrade: run \`weekpost upgrade --apply\` or \`weekpost setup --apply --only=worker.deploy\`.`);
+    else out.log(`\nThe lock is already on ${plan.installed}, but ${n} file(s) or migration(s) differ${plan.deployPending ? " and the Worker was not deployed after the last upgrade" : ""}; \`weekpost upgrade --apply\` will fix them.`);
   } else {
     out.log(
       "\nNothing blocks the upgrade. `weekpost upgrade --apply` (in a terminal) will: 1) apply pending migrations (asks for your Postgres connection string; migrations cannot be undone), 2) write the files above (asking for each \"edited\" one), 3) update weekpost.lock.json, 4) offer to deploy worker/ to your live Worker. Files can be undone with `git checkout -- .` before you commit.",
