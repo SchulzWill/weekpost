@@ -79,7 +79,7 @@ flowchart LR
 | Topic sources for the agent (`sources pull`, `ideasFile`) | available |
 | Agent files for Claude Code and Codex | available; Claude Code is the one tested |
 | Weekly metrics report (`metrics`) | available; the `weekpost-metrics` Action posts it weekly as an issue, and the agent reading it is next |
-| Project upgrade (`upgrade --plan`) | plan only: lists what changes; applying is not built |
+| Project upgrade (`upgrade --plan`, `upgrade --apply`) | available: install the new version, run `upgrade --plan`, then `upgrade --apply` in a terminal |
 | Local image generation (ComfyUI) | not built |
 | Networks other than Instagram | not built |
 
@@ -172,7 +172,6 @@ No. Each person creates their own Meta app and uses it on accounts they own or m
 No dates. In rough order:
 
 - The agent reading the weekly metrics issue before it drafts the next week.
-- Applying an upgrade (`upgrade --plan` already lists what changes).
 - Local image generation (ComfyUI) as an alternative to OpenRouter.
 - Networks other than Instagram.
 

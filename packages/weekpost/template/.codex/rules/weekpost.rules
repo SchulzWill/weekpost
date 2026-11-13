@@ -36,6 +36,36 @@ prefix_rule(
 )
 
 prefix_rule(
+    pattern = ["npx", "weekpost", "upgrade", "--apply"],
+    decision = "forbidden",
+    justification = "weekpost upgrade --apply: changes the database and the Worker; run it yourself in a terminal",
+)
+
+prefix_rule(
+    pattern = ["npx", ["-y", "--yes"], "weekpost", "upgrade", "--apply"],
+    decision = "forbidden",
+    justification = "weekpost upgrade --apply: changes the database and the Worker; run it yourself in a terminal",
+)
+
+prefix_rule(
+    pattern = ["weekpost", "upgrade", "--apply"],
+    decision = "forbidden",
+    justification = "weekpost upgrade --apply: changes the database and the Worker; run it yourself in a terminal",
+)
+
+prefix_rule(
+    pattern = ["./node_modules/.bin/weekpost", "upgrade", "--apply"],
+    decision = "forbidden",
+    justification = "weekpost upgrade --apply: changes the database and the Worker; run it yourself in a terminal",
+)
+
+prefix_rule(
+    pattern = ["node", ["node_modules/weekpost/bin/weekpost.js", "./node_modules/.bin/weekpost"], "upgrade", "--apply"],
+    decision = "forbidden",
+    justification = "weekpost upgrade --apply: changes the database and the Worker; run it yourself in a terminal",
+)
+
+prefix_rule(
     pattern = ["npx", "weekpost", "token"],
     decision = "forbidden",
     justification = "weekpost token: writes outside the repository or gives the approval a human must give; run it yourself in a terminal",

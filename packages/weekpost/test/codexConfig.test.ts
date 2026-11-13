@@ -32,7 +32,7 @@ describe("template .codex", () => {
 
   it("forbids the commands that write outside the repository, in every way of launching weekpost", () => {
     for (const prefix of ["npx weekpost", "npx -y weekpost", "npx --yes weekpost", "weekpost", "./node_modules/.bin/weekpost", "node node_modules/weekpost/bin/weekpost.js"]) {
-      for (const c of ["setup --apply", "token en", "first-post en --yes", "enqueue dir --weeks=w"]) expect(decide(`${prefix} ${c}`), `${prefix} ${c}`).toBe("forbidden");
+      for (const c of ["setup --apply", "upgrade --apply", "upgrade --apply --print", "token en", "first-post en --yes", "enqueue dir --weeks=w"]) expect(decide(`${prefix} ${c}`), `${prefix} ${c}`).toBe("forbidden");
       for (const c of ["setup --only=worker.deploy --apply", "cancel p --yes", "restore p --yes", "reschedule p --yes", "resolve p --yes"]) expect(decide(`${prefix} ${c}`), `${prefix} ${c}`).not.toBe("none");
     }
   });

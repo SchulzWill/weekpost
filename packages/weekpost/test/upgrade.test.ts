@@ -210,7 +210,7 @@ describe("weekpost upgrade --plan", () => {
     const c = cap();
     expect(await runUpgrade(["--plan", `--project=${dir}`], c.out, dir, deps({ templateRoot }))).toBe(0);
     expect(c.text()).toContain("edited = you changed it; the diff shows your version (-) against the new one (+); upgrade will not overwrite it without asking");
-    expect(c.text()).toContain("To apply it, run `weekpost upgrade --apply` in a terminal.");
+    expect(c.text()).toContain("`weekpost upgrade --apply` (in a terminal) will: 1) apply pending migrations");
     append(dir, "AGENTS.md", "\nunsaved\n");
     const b = cap();
     expect(await runUpgrade(["--plan", `--project=${dir}`], b.out, dir, deps({ templateRoot }))).toBe(1);

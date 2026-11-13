@@ -98,7 +98,15 @@ export const LOCK_FILE = "weekpost.lock.json";
  * `answers` and `renderedOn` are what `renderTemplate` needs to produce the same bytes again (no secrets in them);
  * `renderedOn` is the day written into PRIVACY.md.
  */
-export type Lock = { lockVersion: 1; weekpost: string; renderedOn: string; answers: Answers; files: Record<string, string> };
+export type Lock = {
+  lockVersion: 1;
+  weekpost: string;
+  renderedOn: string;
+  answers: Answers;
+  files: Record<string, string>;
+  /** Set by `upgrade --apply` when the files and the lock are updated but the Worker was not deployed yet. */
+  deployPending?: true;
+};
 export type RenderedFile = { path: string; content: Buffer };
 
 /** The installed weekpost version, from the package.json that ships next to `template/`. */

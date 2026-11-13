@@ -12,7 +12,7 @@ How a release is cut: see [Releasing](docs/releasing.md).
 
 ### Improvements
 
-- `weekpost upgrade --apply` carries out what `--plan` shows, at a terminal: it updates the database, then your files (asking before it replaces one you edited), then the lock, and offers to deploy the Worker. The template denies it to agents, like `setup --apply`. Existing projects: copy the `upgrade --apply` line of `.claude/settings.json` from the template.
+- `weekpost upgrade --apply` carries out what `--plan` shows, at a terminal: it updates the database, then your files (asking before it replaces one you edited), then the lock, and offers to deploy the Worker. The template denies it to Claude Code and Codex, like `setup --apply`; `upgrade --apply` brings those rule files up to date itself (it asks first if you edited them).
 
 ## 0.1.1 - 2026-11-13
 

@@ -17,7 +17,7 @@ export type ApplyIO = {
   secret(name: SecretName): Promise<string>;
   /** The context with whatever the run has learned so far (the Supabase URL and key typed at a prompt). */
   context(): SetupContext;
-  options: { only?: string; print?: boolean };
+  options: { only?: string; print?: boolean; /** The caller (upgrade) prints its own summary and resume hints. */ quiet?: boolean };
   /** Asks a yes/no question at the terminal (an action that deletes something asks before it does). */
   confirm(question: string): Promise<boolean>;
 };
@@ -33,6 +33,8 @@ export type ApplyDeps = {
   ask?: (label: string) => Promise<string>;
   only?: string;
   print?: boolean;
+  /** No "will run" commands, no resume hint and no closing summary: the caller says those in its own words. */
+  quiet?: boolean;
 };
 
 const LABELS: Record<SecretName, string> = {
@@ -65,7 +67,7 @@ export async function runApply(base: SetupContext, out: Out, confirm: (q: string
     supabase: { url: learned.get("WEEKPOST_SUPABASE_URL") ?? base.supabase.url, key: learned.get("WEEKPOST_SUPABASE_KEY") ?? base.supabase.key },
   });
   const scrub = (text: string) => [...learned.values()].filter(Boolean).reduce((acc, v) => acc.split(v).join("[redacted]"), text);
-  const io: ApplyIO = { out, secret, context, options: { only: deps.only, print: deps.print }, confirm };
+  const io: ApplyIO = { out, secret, context, options: { only: deps.only, print: deps.print, quiet: deps.quiet }, confirm };
 
   const all = stepsFor(base);
   const steps = deps.only ? all.filter((s) => s.id === deps.only) : all;
@@ -94,8 +96,10 @@ export async function runApply(base: SetupContext, out: Out, confirm: (q: string
       continue;
     }
     out.log(`  ${found.detail}`);
-    out.log("  will run:");
-    for (const c of step.commands) out.log(`    ${c}`);
+    if (!deps.quiet) {
+      out.log("  will run:");
+      for (const c of step.commands) out.log(`    ${c}`);
+    }
     if (!(await confirm(`  run ${step.id}?`))) {
       out.log("  skipped");
       pending.push(step.id);
@@ -106,11 +110,12 @@ export async function runApply(base: SetupContext, out: Out, confirm: (q: string
     } catch (e) {
       const message = e instanceof ApplyError || e instanceof SecretError ? e.message : "the step failed";
       out.error(`${step.id} failed: ${scrub(message)}`);
-      out.error("nothing was undone; fix the cause and run `weekpost setup --apply` again, it continues from here");
+      if (!deps.quiet) out.error("nothing was undone; fix the cause and run `weekpost setup --apply` again, it continues from here");
       return 1;
     }
     out.log("  done");
   }
+  if (deps.quiet) return 0;
   if (pending.length) out.log(`\nstill open: ${pending.join(", ")}`);
   else out.log("\nall steps are done");
   return 0;

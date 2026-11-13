@@ -4,7 +4,7 @@
 // database, no GitHub. It exits 1 when something blocks the upgrade.
 // `--apply` carries the plan out. It changes the database and the Worker, so it needs a terminal and asks before each
 // step; there is no --yes. An agent shell has no terminal, so an agent can run --plan but never --apply.
-import { applyUpgrade, type ApplyUpgradeDeps } from "../upgrade/apply.ts";
+import { applyUpgrade, Stopped, type ApplyUpgradeDeps } from "../upgrade/apply.ts";
 import { planUpgrade, type PlanDeps, type UpgradePlan } from "../upgrade/plan.ts";
 import { projectPaths, type Out } from "./check.ts";
 import { hasTty, requireTty } from "./secrets.ts";
@@ -13,7 +13,8 @@ const USAGE = "usage: weekpost upgrade --plan [--json] | --apply [--print]   (--
 const HELP = `${USAGE}
 Run after installing a new weekpost.
   --plan   lists what the upgrade would change in this project. Writes nothing.
-  --apply  does it, at a terminal, asking before each step: database first, then files, then the Worker.`;
+  --apply  does it, at a terminal: database (asks; needs your Postgres connection string), files (asks only for files you edited), lock, then offers to deploy the Worker.
+  --print  with --apply: print the migration SQL to paste into Supabase instead of connecting, and stop there.`;
 const LEGEND = "update = we replace it (you never touched it) · edited = you changed it; the diff shows your version (-) against the new one (+); upgrade will not overwrite it without asking · new = we add it · removed = we delete it · record = identical to the new file; only added to the lock";
 
 const tag = (n: number, title: string) => `${n}. ${title}`;
@@ -53,6 +54,8 @@ export function renderUpgradePlan(plan: UpgradePlan, out: Out): void {
     out.log(`${plan.toChange} to change, ${plan.unchanged} already current`);
   }
 
+  if (plan.deployPending) out.log("\nThe Worker was not deployed after the last upgrade and still runs the old version: `weekpost upgrade --apply` offers it again.");
+
   out.log(`\n${tag(5, "Setup steps still to do")}`);
   if (!plan.steps) out.log("skipped: the config did not load");
   else if (plan.steps.length === 0) out.log("none");
@@ -61,10 +64,15 @@ export function renderUpgradePlan(plan: UpgradePlan, out: Out): void {
   if (plan.blocked) {
     const n = plan.blockers.length;
     out.log(`\nBlocked by ${n} problem(s). Nothing was written. Fix the ${n} problem(s) marked BLOCKED, commit, and run \`weekpost upgrade --plan\` again.`);
-  } else if (plan.lockVersion === plan.installed) {
+  } else if (plan.lockVersion === plan.installed && plan.toChange === 0 && !(plan.migrations?.pending.length) && !plan.deployPending) {
     out.log(`\nAlready on ${plan.installed} (the lock matches the installed version); nothing to upgrade.`);
+  } else if (plan.lockVersion === plan.installed) {
+    const n = plan.toChange + (plan.migrations?.pending.length ?? 0);
+    out.log(`\nThe lock is already on ${plan.installed}, but ${n} file(s) or migration(s) differ${plan.deployPending ? " and the Worker was never deployed with this version" : ""}; \`weekpost upgrade --apply\` will fix them.`);
   } else {
-    out.log("\nNothing blocks the upgrade. To apply it, run `weekpost upgrade --apply` in a terminal.");
+    out.log(
+      "\nNothing blocks the upgrade. `weekpost upgrade --apply` (in a terminal) will: 1) apply pending migrations (asks for your Postgres connection string; migrations cannot be undone), 2) write the files above (asking for each \"edited\" one), 3) update weekpost.lock.json, 4) offer to deploy worker/ to your live Worker. Files can be undone with `git checkout -- .` before you commit.",
+    );
   }
 }
 
@@ -87,7 +95,15 @@ export async function runUpgrade(args: string[], out: Out = console, cwd = proce
     }
     const blocked = requireTty("upgrade --apply", out, deps.tty ?? hasTty());
     if (blocked) return blocked;
-    return applyUpgrade(projectPaths(args, cwd).projectRoot, out, { ...deps, print: args.includes("--print") });
+    try {
+      return await applyUpgrade(projectPaths(args, cwd).projectRoot, out, { ...deps, print: args.includes("--print") });
+    } catch (e) {
+      if (e instanceof Stopped || (e as Error).name === "AbortError") {
+        out.error("Stopped. Steps already done stay done; run `weekpost upgrade --apply` again to continue.");
+        return 130;
+      }
+      throw e;
+    }
   }
   const known = (a: string) => a === "--plan" || a === "--json" || a.startsWith("--project=");
   if (!args.includes("--plan") || args.some((a) => !known(a))) {

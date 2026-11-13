@@ -1,7 +1,7 @@
 // `weekpost upgrade --plan`: everything that has to be true before an upgrade writes anything, and what it would
 // write. Pure reads: the project is never modified, and the only network calls are GETs on the Supabase REST API.
-import { existsSync, lstatSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, lstatSync, readFileSync, realpathSync } from "node:fs";
+import { dirname, isAbsolute, join, sep } from "node:path";
 import { buildContext, type SetupDeps } from "../cli/setup.ts";
 import { loadConfig } from "../config/load.ts";
 import { ConfigError } from "../config/parse.ts";
@@ -21,7 +21,7 @@ export const isUserOwned = (path: string) => USER_FILES.has(path) || USER_DIRS.s
 
 export type FileState = "update" | "edited" | "new" | "removed" | "record";
 export type FileEntry = { path: string; state: FileState; note?: string; /** Unified diff of the file on disk against the new one (`edited` only). */ diff?: string };
-export type Blocker = { item: 1 | 2 | 3 | 4; message: string; week?: string };
+export type Blocker = { item: 1 | 2 | 3 | 4; message: string; week?: string; /** The only problem is uncommitted changes in generated files. */ dirty?: true };
 export type MigrationReport = { state: "ok" | "pending" | "unknown"; detail: string; current: number | null; latest: number; pending: string[] };
 
 export type UpgradePlan = {
@@ -41,6 +41,8 @@ export type UpgradePlan = {
   toChange: number;
   /** Setup steps that are `todo` with this version. */
   steps: StepReport[] | null;
+  /** The last upgrade changed the files but the Worker was not deployed. */
+  deployPending: boolean;
 };
 
 export type PlanDeps = {
@@ -84,7 +86,7 @@ function readLock(projectRoot: string): LockRead {
     if (raw.lockVersion !== 1 || typeof raw.weekpost !== "string" || !answers.success || !files || typeof files !== "object" || Object.values(files).some((h) => typeof h !== "string")) {
       return { error: `${LOCK_FILE} is not a lock this weekpost understands (lockVersion 1 with weekpost, answers and files)` };
     }
-    return { lock: { lockVersion: 1, weekpost: raw.weekpost, renderedOn: String(raw.renderedOn ?? ""), answers: answers.data, files: files as Record<string, string> } };
+    return { lock: { lockVersion: 1, weekpost: raw.weekpost, renderedOn: String(raw.renderedOn ?? ""), answers: answers.data, files: files as Record<string, string>, ...(raw.deployPending === true ? { deployPending: true as const } : {}) } };
   } catch {
     return { error: `${LOCK_FILE} is not valid JSON` };
   }
@@ -102,6 +104,48 @@ export function answersFromConfig(config: WeekpostConfig): Answers {
   };
 }
 
+/** Why a path from the lock or the template must never be written or deleted, or null when it is fine (lexical part). */
+export function badKey(path: string): string | null {
+  if (path === "" || isAbsolute(path) || /^[A-Za-z]:/.test(path) || path.startsWith("/")) return "is an absolute path";
+  const parts = path.split(/[\\/]/);
+  if (parts.includes("..")) return 'has a ".." in it';
+  if (parts[0] === ".git") return "is inside .git";
+  return null;
+}
+
+/**
+ * Why a path inside the project must not be written or deleted, or null when it is safe: the path or one of its
+ * folders is a symbolic link, or the real folder it lands in is outside the project.
+ */
+export function unsafePath(projectRoot: string, path: string): string | null {
+  const bad = badKey(path);
+  if (bad) return bad;
+  let realRoot: string;
+  try {
+    realRoot = realpathSync(projectRoot);
+  } catch {
+    return "is in a project folder that cannot be read";
+  }
+  let at = projectRoot;
+  for (const part of path.split("/")) {
+    at = join(at, part);
+    try {
+      if (lstatSync(at).isSymbolicLink()) return "is (or is inside) a symbolic link; weekpost does not write through links";
+    } catch {
+      break; // the rest does not exist yet
+    }
+  }
+  let parent = dirname(join(projectRoot, path));
+  while (!existsSync(parent) && dirname(parent) !== parent) parent = dirname(parent);
+  try {
+    const real = realpathSync(parent);
+    if (real !== realRoot && !real.startsWith(realRoot + sep)) return "would be written outside the project";
+  } catch {
+    return "is in a folder that cannot be read";
+  }
+  return null;
+}
+
 const readDisk = (projectRoot: string, path: string): Buffer | null => {
   const file = join(projectRoot, path);
   try {
@@ -113,13 +157,16 @@ const readDisk = (projectRoot: string, path: string): Buffer | null => {
 
 const isText = (b: Buffer) => !b.includes(0);
 
+/** Unified diff of the file on disk against the new content (a one-line note for binary files). */
+export const diffOf = (path: string, disk: Buffer, content: Buffer) =>
+  isText(disk) && isText(content) ? unifiedDiff(path, disk.toString("utf8"), content.toString("utf8")) : `Binary files a/${path} and b/${path} differ`;
+
 function planFiles(projectRoot: string, lock: Lock | null, next: Map<string, Buffer>): { files: FileEntry[]; unchanged: number } {
-  const locked = Object.fromEntries(Object.entries(lock?.files ?? {}).filter(([p]) => !isUserOwned(p)));
+  const locked = Object.fromEntries(Object.entries(lock?.files ?? {}).filter(([p]) => !isUserOwned(p) && !badKey(p)));
   const files: FileEntry[] = [];
   let unchanged = 0;
   const edited = (path: string, disk: Buffer, content: Buffer, note?: string) => {
-    const diff = isText(disk) && isText(content) ? unifiedDiff(path, disk.toString("utf8"), content.toString("utf8")) : `Binary files a/${path} and b/${path} differ`;
-    files.push({ path, state: "edited", ...(note ? { note } : {}), diff });
+    files.push({ path, state: "edited", ...(note ? { note } : {}), diff: diffOf(path, disk, content) });
   };
   for (const path of [...new Set([...next.keys(), ...Object.keys(locked)])].sort()) {
     const content = next.get(path);
@@ -156,11 +203,22 @@ async function gitDirty(run: Runner, projectRoot: string, paths: string[]): Prom
   if (inside.status !== 0 || inside.stdout.trim() !== "true") return { error: "this project is not in a git repository, so the changes could not be reviewed or undone", dirty: [] };
   const status = await run("git", ["status", "--porcelain", "--untracked-files=all", "--", ...paths], { cwd: projectRoot });
   if (status.status !== 0) return { error: "git status failed", dirty: [] };
-  return { dirty: status.stdout.split("\n").filter(Boolean).map((l) => l.slice(3).trim()) };
+  // git prints paths from the repository root; ours are from the project folder.
+  const prefix = await run("git", ["rev-parse", "--show-prefix"], { cwd: projectRoot });
+  const strip = prefix.status === 0 ? prefix.stdout.trim() : "";
+  return { dirty: status.stdout.split("\n").filter(Boolean).map((l) => l.slice(3).trim().replace(/^"|"$/g, "")).map((f) => (strip && f.startsWith(strip) ? f.slice(strip.length) : f)) };
 }
 
 /** What `--apply` needs besides the plan: the lock it read, the new generated files and what they were rendered with. */
-export type PlanInputs = { lock: Lock | null; answers: Answers | null; today: Date; next: Map<string, Buffer>; installed: string };
+export type PlanInputs = {
+  lock: Lock | null;
+  answers: Answers | null;
+  today: Date;
+  next: Map<string, Buffer>;
+  installed: string;
+  /** sha256 of each planned file as it was on disk when the plan was made (null: absent). */
+  disk: Map<string, string | null>;
+};
 
 export async function planUpgrade(projectRoot: string, deps: PlanDeps = {}): Promise<UpgradePlan> {
   return (await planUpgradeFull(projectRoot, deps)).plan;
@@ -173,7 +231,7 @@ export async function planUpgradeFull(projectRoot: string, deps: PlanDeps = {}):
   const templateRoot = deps.templateRoot ?? TEMPLATE_DIR;
   const blockers: Blocker[] = [];
   const warnings: string[] = [];
-  const plan: UpgradePlan = { blocked: false, installed, lockVersion: null, blockers, warnings, content: null, migrations: null, files: null, unchanged: 0, toChange: 0, steps: null };
+  const plan: UpgradePlan = { blocked: false, installed, lockVersion: null, blockers, warnings, content: null, migrations: null, files: null, unchanged: 0, toChange: 0, steps: null, deployPending: false };
 
   // 1. The lock against the installed version.
   const read = readLock(projectRoot);
@@ -188,6 +246,14 @@ export async function planUpgradeFull(projectRoot: string, deps: PlanDeps = {}):
     warnings.push(`no ${LOCK_FILE}: this project was created before the lock existed, so your files are compared with the new template and any difference counts as your edit. Without a lock, files dropped from the template aren't detected`);
   }
 
+  if (lock) {
+    for (const key of Object.keys(lock.files)) {
+      const why = badKey(key);
+      if (why) blockers.push({ item: 1, message: `${LOCK_FILE} lists "${key}", which ${why}; weekpost will not touch it. Remove that line from the lock (or restore the lock from git)` });
+    }
+    plan.deployPending = lock.deployPending === true;
+  }
+
   // 3 (first, the rest needs it). The config in the new schema.
   let config: WeekpostConfig | null = null;
   try {
@@ -196,7 +262,12 @@ export async function planUpgradeFull(projectRoot: string, deps: PlanDeps = {}):
     for (const w of loaded.warnings) warnings.push(`config ${w}`);
   } catch (e) {
     const message = e instanceof ConfigError ? e.message : (e as Error).message;
-    blockers.push({ item: 3, message: `weekpost.config.ts does not load with weekpost ${installed}: ${message}\nChange it as the "You need to do" part of the CHANGELOG says; upgrade does not edit your config` });
+    blockers.push({
+      item: 3,
+      message: /Cannot find (module|package) 'weekpost'/.test(message)
+        ? "weekpost is not installed in this project; run `npm i -D weekpost` here first"
+        : `weekpost.config.ts does not load with weekpost ${installed}: ${message}\nChange it as the "You need to do" part of the CHANGELOG says; upgrade does not edit your config`,
+    });
   }
 
   // The answers the new template is rendered with: the lock's, or the config's when there is no lock.
@@ -213,11 +284,25 @@ export async function planUpgradeFull(projectRoot: string, deps: PlanDeps = {}):
     plan.toChange = files.filter((f) => f.state !== "record").length;
   }
 
-  // 2. Git clean on the generated files.
-  const generated = [...new Set([LOCK_FILE, ...Object.keys(lock?.files ?? {}), ...(plan.files ?? []).map((f) => f.path)])].filter((p) => !isUserOwned(p));
+  // 2a. Nothing to write may be, or sit inside, a symbolic link.
+  const touched = [...new Set([LOCK_FILE, ...Object.keys(lock?.files ?? {}).filter((p) => !isUserOwned(p) && !badKey(p)), ...next.keys()])].sort();
+  for (const path of touched) {
+    const why = unsafePath(projectRoot, path);
+    if (why) blockers.push({ item: 2, message: `${path} ${why}. Replace it with a regular file (or remove it) and commit` });
+  }
+
+  // 2b. Git clean on the generated files. A file that already holds the new version is not a problem: it is what an
+  // interrupted upgrade leaves behind, and running it again just finishes the job.
+  const disk = new Map<string, string | null>();
+  for (const path of [...next.keys(), ...(plan.files ?? []).map((f) => f.path)]) {
+    const b = unsafePath(projectRoot, path) ? null : readDisk(projectRoot, path);
+    disk.set(path, b ? sha256(b) : null);
+  }
+  const generated = [...new Set([LOCK_FILE, ...Object.keys(lock?.files ?? {}).filter((p) => !isUserOwned(p) && !badKey(p)), ...(plan.files ?? []).map((f) => f.path)])].filter((p) => !isUserOwned(p));
   const git = await gitDirty(run, projectRoot, generated);
+  const dirty = git.dirty.filter((f) => !(next.has(f) && lock && lock.weekpost !== installed && disk.get(f) === sha256(next.get(f)!)));
   if (git.error) blockers.push({ item: 2, message: git.error });
-  else if (git.dirty.length) blockers.push({ item: 2, message: `uncommitted changes in files weekpost generated; commit or stash them first:\n${git.dirty.map((f) => `  ${f}`).join("\n")}` });
+  else if (dirty.length) blockers.push({ item: 2, dirty: true, message: `uncommitted changes in files weekpost generated; commit or stash them first:\n${dirty.map((f) => `  ${f}`).join("\n")}` });
 
   // 4. The check on every week.
   if (config) {
@@ -247,5 +332,5 @@ export async function planUpgradeFull(projectRoot: string, deps: PlanDeps = {}):
   }
 
   plan.blocked = blockers.length > 0;
-  return { plan, inputs: { lock, answers, today, next, installed } };
+  return { plan, inputs: { lock, answers, today, next, installed, disk } };
 }
