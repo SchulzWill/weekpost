@@ -10,11 +10,13 @@ import { runUpgrade } from "../src/cli/upgrade.ts";
 import { checkContent } from "../src/content/load.ts";
 import { testConfig } from "../src/content/fixtures.ts";
 import { spawnRunner, type Runner } from "../src/setup/runner.ts";
-import { LOCK_FILE, TEMPLATE_DIR, type Answers } from "../src/setup/template.ts";
+import { LOCK_FILE, packageVersion, TEMPLATE_DIR, type Answers } from "../src/setup/template.ts";
 import { unifiedDiff } from "../src/upgrade/diff.ts";
 import { compareVersions } from "../src/upgrade/plan.ts";
 
 const NOW = new Date("2026-11-01T12:00:00Z");
+// `init` writes the package version into the lock, so these tests follow it across releases.
+const VERSION = packageVersion();
 const ANSWERS: Answers = { brandName: "Shop", accounts: [{ handle: "shop_en", lang: "en", timeZone: "Europe/London", hemisphere: "north" }], pillars: ["tip", "story"], cta: ["link in bio"], previewLabel: "ok-to-post" };
 
 const cap = () => {
@@ -107,7 +109,7 @@ describe("weekpost upgrade --plan", () => {
     expect(c.text()).toContain("0 to change");
     expect(fingerprint(dir)).toEqual(before);
     const { json } = await plan(dir);
-    expect(json).toMatchObject({ blocked: false, lockVersion: "0.1.0", installed: "0.2.0", files: [], blockers: [] });
+    expect(json).toMatchObject({ blocked: false, lockVersion: VERSION, installed: "0.2.0", files: [], blockers: [] });
     // The setup steps that are still todo are listed (here Chromium, which the fake says is missing).
     expect(json.steps.map((s: any) => s.id)).toContain("project.deps");
     // The only network calls are GETs.
@@ -191,9 +193,9 @@ describe("weekpost upgrade --plan", () => {
   it("says it is already on the installed version, numbers sections 1-5 and marks an empty section ok", async () => {
     const dir = await project();
     const c = cap();
-    expect(await runUpgrade(["--plan", `--project=${dir}`], c.out, dir, deps({ installed: "0.1.0" }))).toBe(0);
+    expect(await runUpgrade(["--plan", `--project=${dir}`], c.out, dir, deps({ installed: VERSION }))).toBe(0);
     const t = c.text();
-    expect(t).toContain("Already on 0.1.0 (the lock matches the installed version); nothing to upgrade.");
+    expect(t).toContain(`Already on ${VERSION} (the lock matches the installed version); nothing to upgrade.`);
     expect(t).not.toContain("Nothing blocks");
     expect(t).toMatch(/1\. Version and files\nok/);
     for (const h of ["2. Content", "3. Migrations", "4. Files", "5. Setup steps still to do"]) expect(t).toContain(h);
