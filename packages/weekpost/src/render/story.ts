@@ -1,5 +1,6 @@
 // Story 1080x1920: logo, optional illustrative image (no label), large text and a bottom strip. By default the
-// strip is left free for the link sticker; with `opts.cta` it becomes a card carrying that text (never a URL).
+// strip is left free for the link sticker; with `opts.cta` it becomes a card carrying that text (never a URL), kept above the bottom 250 px safe zone
+// (Instagram's reply bar) so nothing key sits under the UI.
 import type { Post } from "../content/post.ts";
 
 type Account = string; // account id from the config
@@ -21,8 +22,8 @@ p{margin-top:64px;font-size:64px;font-weight:800;line-height:1.08;letter-spacing
 /* Link sticker strip: 420 px left free at the bottom (outside the Instagram UI). */
 ${
   cta
-    ? `/* CTA card: takes the same 420 px strip the sticker would use. */
-.cta{margin-top:auto;height:420px;margin-bottom:0;display:flex;align-items:center;justify-content:center;text-align:center;padding:0 64px;border-radius:36px 36px 0 0;background:${T.primary};color:${T.dark};font-size:56px;font-weight:800;line-height:1.1;letter-spacing:-.01em;text-wrap:balance}`
+    ? `/* CTA card: sits in the upper part of the same 420 px strip, fully above the bottom 250 px that Instagram covers with the reply bar. */
+.cta{margin-top:auto;height:170px;margin-bottom:250px;display:flex;align-items:center;justify-content:center;text-align:center;padding:0 48px;border-radius:36px;background:${T.primary};color:${T.dark};font-size:56px;font-weight:800;line-height:1.1;letter-spacing:-.01em;text-wrap:balance}`
     : `.sticker-zone{margin-top:auto;height:420px}`
 }
 </style></head><body>
