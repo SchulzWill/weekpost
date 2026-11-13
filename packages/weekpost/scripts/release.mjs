@@ -86,6 +86,7 @@ export function release({ root, version, tag = false, dryRun = false, date = new
     ...(tag ? [] : [`git tag -a v${version} -m "weekpost ${version}"`]),
     `git push origin main v${version}`,
     `gh release create v${version} ${tarball} --title "weekpost ${version}" --notes-file ${notes}`,
+    `npm publish ${tarball}   # asks for your 2FA code`,
   ];
   return { version, tarball, steps };
 }

@@ -27,23 +27,20 @@ Use an OpenRouter key with a credit limit. `weekpost doctor` warns when the key 
 
 ### 2. Install
 
-weekpost ships as a tarball; the template that `init` copies is inside it. There is no release yet, so build the tarball from a clone of this repository first (this is the path that works today; a release will add a download URL):
-
-```sh
-git clone https://github.com/SchulzWill/weekpost.git
-(cd weekpost/packages/weekpost && npm pack --pack-destination ..)   # writes weekpost/weekpost-<version>.tgz
-```
+weekpost is an npm package, and the template that `init` copies ships inside it. Installing it downloads ffmpeg (about 44 MB); Chromium is a separate download of about 150 MB.
 
 `npx weekpost --version` prints the installed version, and [CHANGELOG.md](../CHANGELOG.md) lists what each release changes.
 
 ```sh
 mkdir my-brand-social && cd my-brand-social
 git init && npm init -y
-npm i /path/to/weekpost/weekpost-<version>.tgz
+npm i -D weekpost
 npx playwright install chromium
 ```
 
-The local secrets file is named after the folder and a short hash of its full path, like `~/.config/weekpost/my-brand-social-1a2b3c4d.env`, so two folders with the same name never share secrets. Installing downloads `ffmpeg-static`, about 44 MB.
+You may see a warning that lists esbuild, ffmpeg-static or fsevents as packages with install scripts. The install works without approving anything.
+
+The local secrets file is named after the folder and a short hash of its full path, like `~/.config/weekpost/my-brand-social-1a2b3c4d.env`, so two folders with the same name never share secrets. 
 
 ### 3. Start the project
 
@@ -51,9 +48,9 @@ The local secrets file is named after the folder and a short hash of its full pa
 npx weekpost init
 ```
 
-`init` asks for the brand name, each account (Instagram handle, language, time zone, hemisphere and the link base: the `https://` page that "link in bio" leads to), the pillars, the call to action and a contact for the privacy policy, then copies `weekpost.config.ts`, `assets/`, `content/`, `worker/`, `.github/`, `AGENTS.md`, `BRIEF.md`, `PRIVACY.md` and the agent skills, writes `weekpost.lock.json` (the version, your answers and a hash of each generated file; commit it), and runs `weekpost check`. It stops without writing anything if one of those paths already exists, and names it. Without a terminal, pass the answers as a file with `--answers=<file.json>` (format in [Manual setup](manual-setup.md), step 1; the link base is the account's `linkBase`, which must start with `https://`). Then:
+`init` asks for the brand name, each account (Instagram handle, language, time zone, hemisphere and the link base: the `https://` page that "link in bio" leads to), the pillars, the call to action and a contact for the privacy policy, then copies `weekpost.config.ts`, `assets/`, `content/`, `worker/`, `.github/`, `.gitignore`, `AGENTS.md`, `CLAUDE.md`, `BRIEF.md`, `PRIVACY.md` and the agent skills and settings (`skills/`, `.claude/`, `.codex/`, `.agents/`), writes `weekpost.lock.json` (the version, your answers and a hash of each generated file; commit it), and runs `weekpost check`. It stops without writing anything if one of those paths already exists, and names it. Without a terminal, pass the answers as a file with `--answers=<file.json>` (format in [Manual setup](manual-setup.md), step 1; the link base is the account's `linkBase`, which must start with `https://`). Then:
 
-- Add the font and logo files that `weekpost.config.ts` names under `assets/`.
+- Replace the placeholder font and logo in `assets/` with your own.
 - Fill in `BRIEF.md` with your voice. The agent reads it before every draft.
 - Commit, create the GitHub repository and push to `main`.
 

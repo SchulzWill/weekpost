@@ -44,11 +44,6 @@ What you will see:
 
 `generate` prints nothing for about 25 seconds before the first line. That is the render, not a hang.
 
-Two things that may show up:
-
-- **`npm install` warns about install scripts** (npm 11: "packages have install scripts not yet covered by allowScripts: esbuild, fsevents"). weekpost does not need them, and the install works without approving anything.
-- ffmpeg comes with the package (`ffmpeg-static`, about 44 MB).
-
 To see real media, drop `--fake-media` and set `OPENROUTER_API_KEY` ([what it could cost](#what-it-could-cost)).
 
 ## How a week works
@@ -121,16 +116,16 @@ Identical prompts and inputs come from the cache, so re-running a week costs not
 
 ## Use it in your project
 
-There is no release and no npm package yet; the first release is coming. The path that works today builds the package from a clone:
+Install weekpost from npm in your own repository:
 
 ```sh
-git clone https://github.com/SchulzWill/weekpost.git
-cd weekpost/packages/weekpost && npm pack     # writes weekpost-<version>.tgz here
 cd /path/to/your-repo
-npm i /path/to/weekpost/packages/weekpost/weekpost-<version>.tgz
+npm i -D weekpost
 npx playwright install chromium
 npx weekpost init
 ```
+
+You may see a warning that lists esbuild, ffmpeg-static or fsevents as packages with install scripts. The install works without approving anything.
 
 `init` asks for your brand, accounts and pillars, and copies the config, the Worker, the CI workflows and the agent skills into your repo. Then, in Claude Code or Codex, ask your agent to **run the `setup-guide` skill**. It walks you through the accounts and the first post. Prefer to do it yourself? Follow [docs/setup.md](docs/setup.md). A first-timer needs about three hours, most of it creating accounts.
 
