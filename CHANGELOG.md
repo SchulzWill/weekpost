@@ -12,6 +12,8 @@ How a release is cut: see [Releasing](docs/releasing.md).
 
 ### Improvements
 
+- New [Upgrading](docs/upgrading.md) guide and a README section: the order of the commands, what `upgrade --apply` does to the database, the files and the Worker, `--print`, and the pending-deploy notice.
+- `weekpost doctor` warns when the `gh` login has no `workflow` scope (needed to push `.github/workflows/`, which an upgrade does) and prints `gh auth refresh -s workflow`.
 - `weekpost upgrade --apply` carries out what `--plan` shows, at a terminal: it updates the database, then your files (asking before it replaces one you edited), then the lock, and offers to deploy the Worker. The template denies it to Claude Code and Codex, like `setup --apply`; `upgrade --apply` brings those rule files up to date itself (it asks first if you edited them).
 
 ## 0.1.1 - 2026-11-13
