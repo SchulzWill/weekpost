@@ -325,6 +325,12 @@ describe("weekpost doctor", () => {
     const without = await greenDoctor((w) => (w.runs["gh auth status"] = status("'gist', 'read:org', 'repo'")));
     expect(find(without.checks, "gh.workflow-scope")).toMatchObject({ level: "warn", fix: "gh auth refresh -s workflow" });
     expect(without.code).toBe(0);
+    const viaEnv = await greenDoctor((w) => {
+      w.runs["gh auth status"] = status("'repo'");
+      w.env.GH_TOKEN = "SENTINEL-gh-token";
+    });
+    expect(find(viaEnv.checks, "gh.workflow-scope").fix).toMatch(/token.*workflow/);
+    expect(JSON.stringify(viaEnv.checks)).not.toContain("SENTINEL-gh-token");
     const stderrOnly = await greenDoctor((w) => (w.runs["gh auth status"] = { status: 0, stderr: "  - Token scopes: 'repo'\n" }));
     expect(find(stderrOnly.checks, "gh.workflow-scope").level).toBe("warn");
     const withScope = await greenDoctor((w) => (w.runs["gh auth status"] = status("'gist', 'repo', 'workflow'")));

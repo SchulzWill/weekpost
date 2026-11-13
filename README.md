@@ -141,7 +141,7 @@ npx weekpost upgrade --plan      # shows what would change; writes nothing
 npx weekpost upgrade --apply     # you run this one, in a terminal
 ```
 
-`--apply` asks before each step: the database migrations (they cannot be undone), then your files (git can undo them), then the lock, then the Worker deploy (it goes live). Afterwards, review with `git diff`, merge any `*.weekpost-new*` file, then commit and open a pull request. Your agent can run `--plan`, but it is blocked from `--apply`. If you prefer to paste the SQL into Supabase yourself, use `--apply --print`. The full walkthrough is in [docs/upgrading.md](docs/upgrading.md).
+`--apply` runs four steps in order: the database migrations (it asks first; they cannot be undone), your files (written without asking, except files you edited or that weekpost removes; git can undo them), the lock (written without asking), then the Worker deploy (it asks first; it goes live). Afterwards, review with `git diff`, merge and then delete any `*.weekpost-new*` file (in a project created before this version git does not ignore them, so `git add -A` would commit them), then commit and open a pull request. The Worker goes live before your review; to review first, answer no to the deploy and run `npx weekpost setup --apply --only=worker.deploy` after merging. Your agent can run `--plan`, but not `--apply`. If you prefer to paste the SQL into Supabase yourself, use `--apply --print`. The full walkthrough is in [docs/upgrading.md](docs/upgrading.md).
 
 ## Documentation
 

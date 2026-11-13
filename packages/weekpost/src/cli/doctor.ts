@@ -219,7 +219,9 @@ export async function ghScopeCheck(ctx: SetupContext): Promise<Check | undefined
   if (line === undefined) return undefined;
   const scopes = line.split(",").map((x) => x.replace(/['"\s]/g, ""));
   if (scopes.includes("workflow")) return undefined;
-  return { id: "gh.workflow-scope", level: "warn", detail: "the gh login has no `workflow` scope, so it cannot push changes to .github/workflows/ (weekpost upgrade updates those files)", fix: "gh auth refresh -s workflow" };
+  const fromEnv = Boolean(ctx.env.GH_TOKEN?.trim() || ctx.env.GITHUB_TOKEN?.trim());
+  const fix = fromEnv ? "gh uses a token from GH_TOKEN or GITHUB_TOKEN: create one that includes the `workflow` scope and use it instead" : "gh auth refresh -s workflow";
+  return { id: "gh.workflow-scope", level: "warn", detail: "the gh login has no `workflow` scope, so it cannot push changes to .github/workflows/ (weekpost upgrade updates those files)", fix };
 }
 
 /** Runs every check. Read-only. */
