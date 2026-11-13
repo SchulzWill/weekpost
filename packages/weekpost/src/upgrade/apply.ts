@@ -83,7 +83,7 @@ export async function applyUpgrade(projectRoot: string, out: Out, deps: ApplyUpg
 
   // 2. The files.
   out.log("\nStep 2 of 4: files");
-  const lockFiles: Record<string, string> = { ...(lock?.files ?? {}) };
+  const lockFiles: Record<string, string> = { ...lock?.files };
   const write = (path: string, content: Buffer) => {
     const file = join(projectRoot, path);
     mkdirSync(dirname(file), { recursive: true });
