@@ -105,7 +105,21 @@ export function buildPostSchema(config: WeekpostConfig) {
       .object({
         ...base,
         type: z.literal("story"),
-        story: z.object({ text: textSchema, link_utm_content: z.string().min(1), image_prompt: imagePrompt.optional() }).strict(),
+        // A Story has no link in the caption, so `link` is optional here (the other types require it).
+        // `link` and `link_utm_content` are required when the Story is published by hand (`publish: manual`, or
+        // the `stories.publish` default of the config) and optional when it is published automatically; the check
+        // enforces that, because the effective mode can come from the config.
+        link: textSchema.optional(),
+        story: z
+          .object({
+            text: textSchema,
+            // auto | manual; absent means the `stories.publish` value of the config (manual by default).
+            publish: z.enum(["auto", "manual"], { error: "use auto or manual" }).optional(),
+            // utm_content of the link sticker added by hand; required for a manual Story.
+            link_utm_content: z.string().min(1).optional(),
+            image_prompt: imagePrompt.optional(),
+          })
+          .strict(),
       })
       .strict(),
   ]);
@@ -130,6 +144,6 @@ export function textFields(post: Post): { path: string; text: Text }[] {
     out.push({ path: "reel.narration", text: post.reel.narration });
   }
   if (post.type === "story") out.push({ path: "story.text", text: post.story.text });
-  out.push({ path: "caption", text: post.caption }, { path: "cta", text: post.cta }, { path: "link", text: post.link });
+  out.push({ path: "caption", text: post.caption }, { path: "cta", text: post.cta }, ...(post.link ? [{ path: "link", text: post.link }] : []));
   return out;
 }

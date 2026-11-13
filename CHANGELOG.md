@@ -14,6 +14,18 @@ How a release is cut: see [Releasing](docs/releasing.md).
 
 - `weekpost upgrade --apply` carries out what `--plan` shows, at a terminal: it updates the database, then your files (asking before it replaces one you edited), then the lock, and offers to deploy the Worker. The template denies it to agents, like `setup --apply`. Existing projects: copy the `upgrade --apply` line of `.claude/settings.json` from the template.
 
+## 0.1.1 - 2026-11-13
+
+### You need to do
+
+(none yet)
+
+### Improvements
+
+- The npm package no longer ships test files and test fixtures, so it is smaller.
+- The install docs and `weekpost init` now point to `npm i -D weekpost` instead of a release tarball.
+- `bin` in `package.json` uses the form npm normalizes to (`bin/weekpost.js`).
+
 ## 0.1.0 - 2026-11-05
 
 ### You need to do

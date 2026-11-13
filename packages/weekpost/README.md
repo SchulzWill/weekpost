@@ -7,7 +7,8 @@ An AI agent drafts the week in a pull request. You review the copy. weekpost gen
 > **Status:** pre-alpha.
 
 ```sh
-npm i weekpost
+npm i -D weekpost
+npx playwright install chromium
 npx weekpost init
 ```
 

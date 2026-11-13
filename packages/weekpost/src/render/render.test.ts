@@ -1,4 +1,9 @@
 import { describe, expect, it } from "vitest";
+import { chromium } from "@playwright/test";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { withBrowser } from "./png.ts";
 import { carouselSlideHtml } from "./carousel.ts";
 import { testBrand } from "../../test/fixtures/brand.ts";
 import type { Manifest } from "./manifest.ts";
@@ -100,6 +105,44 @@ describe("storyHtml", () => {
     const html = storyHtml(brand, { text: { a: "Vagas.", b: "Vagas." }, link_utm_content: "s" }, "a");
     expect(html).not.toContain('class="photo"');
   });
+});
+
+// Environments without a browser skip the real-Chromium test (with a warning); it runs locally and in generate.
+const hasChromium = await chromium.launch().then((b) => b.close()).then(() => true, () => false);
+if (!hasChromium) console.warn("render.test: Chromium unavailable, skipping the real-browser Story test");
+
+describe("storyHtml in a real browser", () => {
+  it.skipIf(!hasChromium)("renders 1080x1920 with and without the CTA card", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "story-render-"));
+    try {
+      const story = { text: { a: "Vagas no beta.", b: "Vagas." }, link_utm_content: "s" };
+      const free = join(dir, "free.jpg");
+      const card = join(dir, "card.jpg");
+      const size = { width: 1080, height: 1920 };
+      const box = await withBrowser(async (render, measure) => {
+        await render(storyHtml(brand, story, "a"), free, size);
+        await render(storyHtml(brand, story, "a", undefined, { cta: "Link in the bio" }), card, size);
+        return measure(storyHtml(brand, story, "a", undefined, { cta: "Link in the bio" }), size, () => {
+          const r = document.querySelector(".cta")!.getBoundingClientRect();
+          return { top: r.top, bottom: r.bottom, left: r.left, right: r.right };
+        });
+      });
+      for (const f of [free, card]) {
+        const jpeg = readFileSync(f);
+        // JPEG SOF0/SOF2 marker: height then width, big-endian.
+        let i = 2;
+        while (i < jpeg.length && !(jpeg[i] === 0xff && (jpeg[i + 1] === 0xc0 || jpeg[i + 1] === 0xc2))) i += 2 + jpeg.readUInt16BE(i + 2);
+        expect([jpeg.readUInt16BE(i + 7), jpeg.readUInt16BE(i + 5)]).toEqual([1080, 1920]);
+      }
+      // The card ends at least 250 px above the bottom edge and sits inside the 80 px side margins.
+      expect(box.bottom).toBeLessThanOrEqual(1920 - 250);
+      expect(box.left).toBe(80);
+      expect(box.right).toBe(1000);
+      expect(readFileSync(card).equals(readFileSync(free))).toBe(false);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }, 30_000);
 });
 
 describe("previewHtml", () => {

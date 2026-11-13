@@ -181,6 +181,47 @@ describe("validateWeek", () => {
     expect(validateWeek("2026-W42", { posts: [story] }).issues).toEqual([]);
   });
 
+  describe("Story publish mode", () => {
+    const url = (acc: string, content?: string) => `https://example.com/${acc}/?utm_source=instagram&utm_medium=social&utm_campaign=${acc}${content ? `&utm_content=${content}` : ""}`;
+    const story = (over: Record<string, unknown> = {}, storyOver: Record<string, unknown> = {}) =>
+      carousel({
+        id: "2026-10-13-story-beta", date: "2026-10-13", type: "story", pillar: "other", slides: undefined,
+        story: { text: { a: "Vagas.", b: "Vagas." }, link_utm_content: "story-2026-10-13", ...storyOver },
+        link: { a: url("a", "story-2026-10-13"), b: url("b", "story-2026-10-13") },
+        ...over,
+      });
+    const autoConfig = testConfig({ stories: { publish: "auto", fallbackAfterMinutes: null } });
+    const messages = (post: unknown, cfg = config) => validateWeek("2026-W42", { posts: [post] }, cfg).issues.map((i) => `${i.where}: ${i.message}`);
+
+    it("uses the config default when the post has no publish; manual without the stories block", () => {
+      expect(config.stories).toEqual({ publish: "manual", fallbackAfterMinutes: null });
+      expect(messages(story({}, { link_utm_content: undefined }))).toEqual([expect.stringMatching(/link_utm_content.*manual Story/)]);
+      expect(messages(story({}, { link_utm_content: undefined }), autoConfig)).toEqual([]);
+    });
+
+    it("the post's publish wins over the config", () => {
+      expect(messages(story({}, { publish: "auto", link_utm_content: undefined, }))).toEqual([]);
+      expect(messages(story({ link: undefined }, { publish: "manual" }))).toEqual([expect.stringMatching(/link.*manual Story/)]);
+    });
+
+    it("manual without link_utm_content is an error", () => {
+      expect(messages(story({}, { publish: "manual", link_utm_content: undefined }))).toEqual([expect.stringMatching(/story\.link_utm_content/)]);
+    });
+
+    it("auto without a link passes", () => {
+      expect(messages(story({ link: undefined }, { publish: "auto", link_utm_content: undefined }))).toEqual([]);
+    });
+
+    it("auto with a link outside the UTM rule is an error", () => {
+      const bad = { a: "https://example.com/a/", b: "https://example.com/b/" };
+      expect(messages(story({ link: bad }, { publish: "auto", link_utm_content: undefined })).length).toBeGreaterThan(0);
+    });
+
+    it("other post types still require a link", () => {
+      expect(validateWeek("2026-W42", { posts: [carousel({ link: undefined })] }).issues.length).toBeGreaterThan(0);
+    });
+  });
+
   describe("enqueue_accounts", () => {
     it("absent = undefined (all accounts)", () => {
       expect(validateWeek("2026-W42", { posts: [carousel()] }).enqueueAccounts).toBeUndefined();
