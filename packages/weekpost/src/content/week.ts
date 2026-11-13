@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { WeekpostConfig } from "../config/schema.ts";
 import { CONTENT_VERSION, MIN_CONTENT_VERSION, buildPostSchema, textFields, type Issue, type Post } from "./post.ts";
 import { seasonFor } from "./season.ts";
+import { storyMode } from "./storyMode.ts";
 
 // ISO 8601 week of a YYYY-MM-DD date (UTC), in the folder format: YYYY-Www.
 export function isoWeekOf(date: string): string {
@@ -39,8 +40,13 @@ function checkPost(post: Post, week: string, config: WeekpostConfig, where: (pat
   for (const { path, text } of textFields(post)) {
     for (const acc of post.accounts) if (!text[acc]) err(path, `missing text for ${acc}`);
   }
+  const manualStory = post.type === "story" && storyMode(post, config) === "manual";
+  if (post.type === "story" && manualStory) {
+    if (!post.story.link_utm_content) err("story.link_utm_content", "required for a manual Story (the utm_content of its link)");
+    if (!post.link) err("link", "required for a manual Story (the link sticker)");
+  }
   for (const acc of post.accounts) {
-    const url = post.link[acc];
+    const url = post.link?.[acc];
     if (!url) continue;
     const base = config.accounts[acc].link.base;
     let query: URLSearchParams | undefined;
@@ -54,7 +60,7 @@ function checkPost(post: Post, week: string, config: WeekpostConfig, where: (pat
     } else {
       // utm_campaign is the account; utm_content is the post.
       const want: Record<string, string> = { utm_source: "instagram", utm_medium: "social", utm_campaign: acc };
-      if (post.type === "story") want.utm_content = post.story.link_utm_content;
+      if (post.type === "story" && post.story.link_utm_content) want.utm_content = post.story.link_utm_content;
       for (const [k, v] of Object.entries(want)) if (query.get(k) !== v) err(`link.${acc}`, `use ${k}=${v}`);
       if (!want.utm_content && !query.get("utm_content")) err(`link.${acc}`, "missing utm_content (the post id)");
     }

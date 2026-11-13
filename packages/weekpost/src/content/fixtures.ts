@@ -3,7 +3,7 @@ import { parseConfig } from "../config/parse.ts";
 import type { WeekpostConfig } from "../config/schema.ts";
 import type { LintPlugin } from "../lint/plugin.ts";
 
-export function testConfig(over: { plugins?: LintPlugin[]; reelMax?: number; ctaEn?: string[] | null } = {}): WeekpostConfig {
+export function testConfig(over: { plugins?: LintPlugin[]; reelMax?: number; ctaEn?: string[] | null; stories?: { publish: "auto" | "manual"; fallbackAfterMinutes: number | null } } = {}): WeekpostConfig {
   const account = (lang: string, timeZone: string, hemisphere: "north" | "south", id: string, cta: string[] | null) => ({
     handle: `shop.${id}`, lang, timeZone, hemisphere, voice: "sarah", cta, link: { base: `https://example.com/${id}/` },
   });
@@ -22,5 +22,6 @@ export function testConfig(over: { plugins?: LintPlugin[]; reelMax?: number; cta
     pillars: ["tip", "seasonal", "myth", "other"],
     reel: { maxSeconds: over.reelMax ?? 20 },
     lint: { plugins: over.plugins ?? [] },
+    ...(over.stories ? { stories: over.stories } : {}),
   }).config;
 }

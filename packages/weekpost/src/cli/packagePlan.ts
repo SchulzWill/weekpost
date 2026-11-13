@@ -30,7 +30,7 @@ export function packagePlan(manifest: Manifest, posts: Post[], accounts: Record<
         texts: {
           "caption.txt": `${media.caption}\n`,
           "time.txt": `date: ${post.date}\ntime: ${time}\ntime zone: ${generated.timeZones[acc] ?? info?.timeZone ?? ""}\naccount: ${info ? `@${info.handle}` : acc}\ntype: ${post.type}\npost: ${post.id}\n`,
-          "link.txt": `${post.link[acc] ?? ""}\n`,
+          "link.txt": `${post.link?.[acc] ?? ""}\n`,
         },
       });
     }

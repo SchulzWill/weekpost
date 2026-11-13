@@ -139,7 +139,7 @@ export function planWeek(input: PlanInput): { rows: PlannedRow[]; uploads: Uploa
         postId: post.id, account: acc, type: post.type, week,
         publishAt: localToUtc(post.date, post.times[acc], zone),
         caption, media: media.publish.map(to), cover: cover ? to(cover) : null,
-        link: post.link[acc] ?? null, contentHash: hash,
+        link: post.link?.[acc] ?? null, contentHash: hash,
         mediaHash: mediaHashOf(media.publish.map((f) => fileHashes[f]), cover ? fileHashes[cover] : null),
         ...(post.type === "story" ? { status: "manual" as const } : {}),
       });
