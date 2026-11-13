@@ -188,6 +188,10 @@ export async function applyUpgrade(projectRoot: string, out: Out, deps: ApplyUpg
     return yes;
   };
   out.log("\nStep 1 of 4: database");
+  if (deps.print === true && plan.migrations?.state === "unknown") {
+    out.error(`--print needs the Supabase URL and secret key to know which migrations are pending (${plan.migrations.detail}). Without them it would print every migration from the first, and that SQL fails on an existing database. Save them with \`weekpost setup --apply --only=local.secrets\`, then run \`weekpost upgrade --apply --print\` again. Nothing was changed.`);
+    return 1;
+  }
   const printing = deps.print === true && plan.migrations?.state !== "ok";
   const migrated = await steps(ctx, out, askDb, { actions: deps.actions ?? ACTIONS, only: "db.migrate", print: printing, quiet: true });
   if (printing && migrated === 0) {

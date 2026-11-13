@@ -320,6 +320,26 @@ describe("weekpost doctor", () => {
     expect(find(r.checks, "github.label").level).toBe("warn");
   });
 
+  it("warns, with the command, when gh is logged in without the workflow scope", async () => {
+    const status = (scopes: string) => ({ status: 0, stdout: `github.com\n  - Logged in\n  - Token scopes: ${scopes}\n` });
+    const without = await greenDoctor((w) => (w.runs["gh auth status"] = status("'gist', 'read:org', 'repo'")));
+    expect(find(without.checks, "gh.workflow-scope")).toMatchObject({ level: "warn", fix: "gh auth refresh -s workflow" });
+    expect(without.code).toBe(0);
+    const viaEnv = await greenDoctor((w) => {
+      w.runs["gh auth status"] = status("'repo'");
+      w.env.GH_TOKEN = "SENTINEL-gh-token";
+    });
+    expect(find(viaEnv.checks, "gh.workflow-scope").fix).toMatch(/token.*workflow/);
+    expect(JSON.stringify(viaEnv.checks)).not.toContain("SENTINEL-gh-token");
+    const stderrOnly = await greenDoctor((w) => (w.runs["gh auth status"] = { status: 0, stderr: "  - Token scopes: 'repo'\n" }));
+    expect(find(stderrOnly.checks, "gh.workflow-scope").level).toBe("warn");
+    const withScope = await greenDoctor((w) => (w.runs["gh auth status"] = status("'gist', 'repo', 'workflow'")));
+    expect(withScope.checks.some((c) => c.id === "gh.workflow-scope")).toBe(false);
+    // A token that lists no scopes (fine-grained, or from the environment) is not judged.
+    const noList = await greenDoctor();
+    expect(noList.checks.some((c) => c.id === "gh.workflow-scope")).toBe(false);
+  });
+
   it("a config that does not load is one failing line and exit 1", async () => {
     const lines: string[] = [];
     const code = await runDoctor([`--project=${mkdtempSync(join(tmpdir(), "wp-nocfg-"))}`], { log: (l) => lines.push(l), error: (l) => lines.push(l) });

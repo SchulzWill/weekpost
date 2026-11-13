@@ -20,6 +20,7 @@ When `doctor`, `first-post` or `metrics` reports a problem. Back to the [README]
 | `github.label` fails | a label (`media-ok` or `metrics`) is missing (or `origin` is not a GitHub repository) | push to GitHub, then `npx weekpost setup --apply --only=github.label` (safe to re-run; or: `gh label create metrics`) |
 | `github.metrics-workflow` warns | the project predates `weekpost-metrics` | copy `.github/workflows/weekpost-metrics.yml` from the template, see [operate](operate.md#what-the-workflows-do) |
 | `weekpost-metrics` run fails | environment `weekpost` lacks the Supabase secrets, or the run was not on `main` | check Settings > Environments, then `gh workflow run weekpost-metrics --ref main` |
+| `gh.workflow-scope` warns | the `gh` login has no `workflow` scope, so pushing changes to `.github/workflows/` (which an upgrade makes) is refused | `gh auth refresh -s workflow` (with a token from `GH_TOKEN`, create one that includes `workflow`) |
 | `github.workflows`: not pinned to a commit SHA | a workflow uses a tag | replace each tag with the full commit SHA of that release |
 | Meta dashboard: no "API setup with Unified login" | the app is not connected to a business portfolio | connect it in the use case's Customize page (item 3 of [step 4](setup.md#4-create-the-accounts)) |
 | Meta dashboard: your Instagram account is missing when you generate the token | it belongs to another business portfolio, or to none | add it to the portfolio the app uses (item 2 of [step 4](setup.md#4-create-the-accounts)) and pick that portfolio at login |

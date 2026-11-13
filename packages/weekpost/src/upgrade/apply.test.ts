@@ -66,7 +66,7 @@ const mtimes = (root: string) => {
   return out;
 };
 
-function setup(dir: string, v2: string, over: { tty?: boolean; choices?: Record<string, Choice>; yes?: boolean; failMigrate?: boolean; installed?: string; fake?: boolean; actions?: Actions; deployYes?: boolean; onMigrate?: () => void } = {}) {
+function setup(dir: string, v2: string, over: { tty?: boolean; choices?: Record<string, Choice>; yes?: boolean; failMigrate?: boolean; installed?: string; fake?: boolean; actions?: Actions; deployYes?: boolean; onMigrate?: () => void; schema?: number } = {}) {
   const lines: string[] = [];
   const calls: string[] = [];
   const asked: string[] = [];
@@ -88,7 +88,7 @@ function setup(dir: string, v2: string, over: { tty?: boolean; choices?: Record<
     now: TODAY,
     templateRoot: v2,
     run,
-    setup: { env: {}, home, run, fetch: async () => Promise.reject(new Error("no network in tests")), hasChromium: async () => false },
+    setup: { env: over.schema === undefined ? {} : { WEEKPOST_SUPABASE_URL: "https://abc.supabase.co", WEEKPOST_SUPABASE_KEY: "sb_secret_test" }, home, run, fetch: async () => (over.schema === undefined ? Promise.reject(new Error("no network in tests")) : new Response(JSON.stringify([{ version: over.schema }]), { status: 200 })), hasChromium: async () => false },
     confirm: async (q) => {
       asked.push(q);
       return over.yes ?? false;
@@ -215,12 +215,24 @@ const SQL_ACTIONS = (log: string[]): Actions => ({
 });
 
 describe("weekpost upgrade --apply: review fixes", () => {
-  it("--print only prints the SQL: no file, no lock, no deploy", async () => {
+  it("--print with an unknown schema version stops without printing every migration and changes nothing", async () => {
     const { v1, v2 } = templates();
     const dir = project(v1);
     const before = mtimes(dir);
     const log: string[] = [];
     const t = setup(dir, v2, { fake: false, actions: SQL_ACTIONS(log), yes: true });
+    expect(await t.run(["--apply", "--print"])).toBe(1);
+    expect(log).toEqual([]);
+    expect(t.lines.join("\n")).toMatch(/needs the Supabase URL and secret key.*local\.secrets/);
+    expect(mtimes(dir)).toEqual(before);
+  });
+
+  it("--print only prints the SQL: no file, no lock, no deploy", async () => {
+    const { v1, v2 } = templates();
+    const dir = project(v1);
+    const before = mtimes(dir);
+    const log: string[] = [];
+    const t = setup(dir, v2, { fake: false, actions: SQL_ACTIONS(log), yes: true, schema: 0 });
     expect(await t.run(["--apply", "--print"])).toBe(1);
     expect(log).toEqual(["printed"]);
     expect(t.lines.join("\n")).toMatch(/printed, not run.*without --print/);

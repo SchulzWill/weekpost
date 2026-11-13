@@ -79,7 +79,7 @@ flowchart LR
 | Topic sources for the agent (`sources pull`, `ideasFile`) | available |
 | Agent files for Claude Code and Codex | available; Claude Code is the one tested |
 | Weekly metrics report (`metrics`) | available; the `weekpost-metrics` Action posts it weekly as an issue, and the agent reading it is next |
-| Project upgrade (`upgrade --plan`, `upgrade --apply`) | available: install the new version, run `upgrade --plan`, then `upgrade --apply` in a terminal |
+| Project upgrade (`upgrade --plan`, `upgrade --apply`) | available: see [Upgrading](#upgrading) |
 | Local image generation (ComfyUI) | not built |
 | Networks other than Instagram | not built |
 
@@ -131,11 +131,24 @@ You may see a warning that lists esbuild, ffmpeg-static or fsevents as packages 
 
 To publish you need a free [Supabase](https://supabase.com) project, a free [Cloudflare](https://www.cloudflare.com) account, a professional (Business or Creator) Instagram account in a Meta business portfolio, with a Meta app of your own, an [OpenRouter](https://openrouter.ai) key, and the [GitHub CLI](https://cli.github.com).
 
+## Upgrading
+
+To move a project you already set up to a newer weekpost:
+
+```sh
+npm i -D weekpost@latest
+npx weekpost upgrade --plan      # shows what would change; writes nothing
+npx weekpost upgrade --apply     # you run this one, in a terminal
+```
+
+`--apply` runs four steps in order: the database migrations (it asks first; they cannot be undone), your files (written without asking, except files you edited or that weekpost removes; git can undo them), the lock (written without asking), then the Worker deploy (it asks first; it goes live). Afterwards, review with `git diff`, merge and then delete any `*.weekpost-new*` file (in a project created before this version git does not ignore them, so `git add -A` would commit them), then commit and open a pull request. The Worker goes live before your review; to review first, answer no to the deploy and run `npx weekpost setup --apply --only=worker.deploy` after merging. Your agent can run `--plan`, but not `--apply`. If you prefer to paste the SQL into Supabase yourself, use `--apply --print`. The full walkthrough is in [docs/upgrading.md](docs/upgrading.md).
+
 ## Documentation
 
 Agents: read [AGENTS.md](AGENTS.md) and this list to find your way around.
 
 - [docs/setup.md](docs/setup.md): the guided setup, from an empty folder to a first public post.
+- [docs/upgrading.md](docs/upgrading.md): moving a project to a newer weekpost, and what each step changes.
 - [docs/troubleshooting.md](docs/troubleshooting.md): what each `doctor` and `first-post` error means and what to run.
 - [docs/operate.md](docs/operate.md): the workflows, the queue commands, topic sources, Worker logs and limits.
 - [docs/security.md](docs/security.md): what keeps the agent in line, what does not, and what actually isolates it.

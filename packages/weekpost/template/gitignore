@@ -5,3 +5,4 @@ out/
 .dev.vars
 *.log
 .DS_Store
+*.weekpost-new*

@@ -207,12 +207,31 @@ export function metricsWorkflowCheck(projectRoot: string): Check | undefined {
   return { id, level: "warn", detail: ".github/workflows/weekpost-metrics.yml is missing (the weekly metrics issue will not run)", fix: "copy it from the weekpost template (see docs/operate.md), then: gh label create metrics" };
 }
 
+/**
+ * A classic gh token without the `workflow` scope cannot push changes to .github/workflows/, which `upgrade` does.
+ * Only a logged-in gh that lists its scopes is judged: a fine-grained or environment token lists none, so no warning.
+ */
+export async function ghScopeCheck(ctx: SetupContext): Promise<Check | undefined> {
+  const r = await ctx.run("gh", ["auth", "status"], { cwd: ctx.projectRoot });
+  if (r.status !== 0) return undefined;
+  // gh prints the status to stdout (older versions to stderr).
+  const line = /Token scopes:\s*(.*)/i.exec(`${r.stdout}\n${r.stderr}`)?.[1];
+  if (line === undefined) return undefined;
+  const scopes = line.split(",").map((x) => x.replace(/['"\s]/g, ""));
+  if (scopes.includes("workflow")) return undefined;
+  const fromEnv = Boolean(ctx.env.GH_TOKEN?.trim() || ctx.env.GITHUB_TOKEN?.trim());
+  const fix = fromEnv ? "gh uses a token from GH_TOKEN or GITHUB_TOKEN: create one that includes the `workflow` scope and use it instead" : "gh auth refresh -s workflow";
+  return { id: "gh.workflow-scope", level: "warn", detail: "the gh login has no `workflow` scope, so it cannot push changes to .github/workflows/ (weekpost upgrade updates those files)", fix };
+}
+
 /** Runs every check. Read-only. */
 export async function runChecks(ctx: SetupContext, deps: DoctorDeps = {}): Promise<Check[]> {
   const now = (deps.now ?? (() => new Date()))();
   const checks: Check[] = [nodeCheck(deps.nodeVersion ?? process.versions.node)];
   checks.push(await fromProbe(ctx, "project.deps", "chromium"));
   checks.push(await fromProbe(ctx, "prereq.logins", "logins"));
+  const scope = await ghScopeCheck(ctx);
+  if (scope) checks.push(scope);
   checks.push(await openrouterCheck(ctx));
   checks.push(keyTypeCheck(ctx));
   checks.push(await fromProbe(ctx, "db.migrate", "supabase.schema"));

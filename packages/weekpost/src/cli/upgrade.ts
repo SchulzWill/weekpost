@@ -14,7 +14,7 @@ const HELP = `${USAGE}
 Run after installing a new weekpost.
   --plan   lists what the upgrade would change in this project. Writes nothing.
   --apply  does it, at a terminal: database (asks; needs your Postgres connection string), files (asks only for files you edited), lock, then offers to deploy the Worker.
-  --print  with --apply: print the migration SQL to paste into Supabase instead of connecting, and stop there.`;
+  --print  with --apply: when migrations are pending, print only those (to paste into Supabase instead of connecting) and stop, changing nothing. Needs the Supabase URL and secret key to know which are pending.`;
 const LEGEND = "update = we replace it (you never touched it) · edited = you changed it; the diff shows your version (-) against the new one (+); upgrade will not overwrite it without asking · new = we add it · removed = we delete it · record = identical to the new file; only added to the lock";
 
 const tag = (n: number, title: string) => `${n}. ${title}`;
