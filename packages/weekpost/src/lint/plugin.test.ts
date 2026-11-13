@@ -123,4 +123,49 @@ posts:
     const boom: LintPlugin = { name: "boom", captionSuffix: () => { throw new Error("no suffix"); } };
     expect(lintPost(post(), testConfig({ plugins: [boom] })).some((i) => /captionSuffix failed: no suffix/.test(i.message))).toBe(true);
   });
+
+  describe("lintWeek", () => {
+    const weekDir = () => {
+      const root = mkdtempSync(join(tmpdir(), "weekpost-"));
+      mkdirSync(join(root, "content/2026-W42"), { recursive: true });
+      writeFileSync(join(root, "content/2026-W42/posts.yaml"), `version: 1
+posts:
+  - id: 2026-10-12-carousel-test
+    date: 2026-10-12
+    type: carousel
+    accounts: [en]
+    times: { en: "12:00" }
+    pillar: tip
+    slides:
+      - { kicker: { en: K }, title: { en: A }, sub: { en: S }, dark: true, image_prompt: x }
+      - { kicker: { en: K }, title: { en: B }, sub: { en: S }, dark: false, image_prompt: y }
+    caption: { en: "Caption." }
+    cta: { en: "See the link in bio." }
+    link: { en: "https://example.com/en/?utm_source=instagram&utm_medium=social&utm_campaign=en&utm_content=carousel-test" }
+`);
+      return join(root, "content");
+    };
+
+    it("receives every post of the week with the week name", () => {
+      const seen: [number, string][] = [];
+      const spy: LintPlugin = { name: "spy", lintWeek: (posts, ctx) => (seen.push([posts.length, ctx.week]), [{ level: "warn", where: "", message: "week note" }]) };
+      const { issues } = checkContent(weekDir(), testConfig({ plugins: [spy] }));
+      expect(seen).toEqual([[1, "2026-W42"]]);
+      expect(issues).toContainEqual({ level: "warn", where: "2026-W42", message: "week note" });
+    });
+
+    it("turns a lintWeek that throws into an error naming the plugin", () => {
+      const boom: LintPlugin = { name: "boom", lintWeek: () => { throw new Error("nope"); } };
+      const { issues } = checkContent(weekDir(), testConfig({ plugins: [boom] }));
+      expect(issues).toContainEqual({ level: "error", where: "2026-W42", message: 'plugin "boom" failed: nope' });
+    });
+
+    it("downgrades its errors to warnings for a past week", () => {
+      const strict: LintPlugin = { name: "strict", lintWeek: () => [{ level: "error", where: "", message: "too many" }] };
+      const cfg = testConfig({ plugins: [strict] });
+      expect(checkContent(weekDir(), cfg).issues.some((i) => i.level === "error")).toBe(true);
+      const past = checkContent(weekDir(), cfg, undefined, undefined, { now: new Date("2027-01-01T00:00:00Z") }).issues;
+      expect(past.find((i) => i.message === "too many")?.level).toBe("warn");
+    });
+  });
 });

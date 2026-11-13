@@ -1,6 +1,7 @@
 // Per-account text lint: the core rules plus the config's plugins. Errors block; warnings go to the preview.
 import type { WeekpostConfig } from "../config/schema.ts";
 import { textFields, type Issue, type Post } from "../content/post.ts";
+import { storyMode } from "../content/storyMode.ts";
 import { nextSeason, seasonFor, type Season } from "../content/season.ts";
 import { captionFor, primaryLang } from "./caption.ts";
 import { guarded } from "./plugin.ts";
@@ -21,7 +22,13 @@ const SEASON_WORDS: Record<string, [string, Season][]> = {
   en: [["autumn", "autumn"], ["winter", "winter"], ["summer", "summer"]],
   pt: [["outono", "autumn"], ["inverno", "winter"], ["primavera", "spring"], ["verão", "summer"], ["verao", "summer"]],
 };
-const toRegexes = (entries: [string, Season][]) => entries.map(([w, season]) => ({ re: word(w), season }));
+// Phrases that promise a tappable link. An automatic Story has no link sticker, so they would mislead. Same language rules as the season words.
+const TAP_PHRASES: Record<string, string[]> = {
+  en: ["tap the link", "link below", "swipe up"],
+  pt: ["toque no link", "clique no link", "link abaixo", "arraste para cima"],
+};
+const tapRegexes = (lang: string) => (TAP_PHRASES[primaryLang(lang)] ?? []).map(word);
+const toRegexes =(entries: [string, Season][]) => entries.map(([w, season]) => ({ re: word(w), season }));
 const seasonRegexes = (lang: string) => toRegexes(SEASON_WORDS[primaryLang(lang)] ?? []);
 // Image prompts are often written in another language than the account's, so they use every known dictionary.
 const allSeasonRegexes = toRegexes(Object.values(SEASON_WORDS).flat());
@@ -67,6 +74,23 @@ export function lintPost(post: Post, config: WeekpostConfig): Issue[] {
       if (post.type === "carousel" && /^slides\[\d+\]\.title$/.test(path) && t.length > TITLE_WARN) {
         add("warn", acc, path, `title with ${t.length} characters may overflow 4 lines`);
       }
+    }
+  }
+
+  if (post.type === "story") {
+    const mode = storyMode(post, config);
+    if (mode === "auto") {
+      for (const { path, text } of textFields(post)) {
+        if (path !== "story.text" && path !== "cta") continue;
+        for (const acc of post.accounts) {
+          const t = text[acc];
+          if (t && tapRegexes(config.accounts[acc].lang).some((re) => re.test(t))) {
+            add("error", acc, path, 'an automatic Story has no link sticker: say "link in bio" instead');
+          }
+        }
+      }
+    } else if (config.stories.fallbackAfterMinutes === null) {
+      issues.push({ level: "warn", where: `${post.id} story.publish`, message: "no deadline: if nobody posts this manual Story, it will not be published (set stories.fallbackAfterMinutes)" });
     }
   }
 

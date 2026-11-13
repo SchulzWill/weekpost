@@ -10,6 +10,8 @@ export interface LintPlugin {
   lintPost?(post: Post, ctx: { config: WeekpostConfig }): Issue[];
   // Rules about one text field in one account. `where` defaults to "<id> <account> <field>".
   lintText?(text: string, field: string, ctx: LintContext): Issue[];
+  // Rules about the whole week (for example, a limit of posts of one kind). Runs once per week, after every post was linted.
+  lintWeek?(posts: Post[], ctx: { config: WeekpostConfig; week: string }): Issue[];
   // Fixed closing line appended to the published caption of the post for that account.
   // `ctx` is optional for callers; plugins that ignore it keep working.
   captionSuffix?(post: Post, account: string, ctx?: { config: WeekpostConfig }): string | undefined;

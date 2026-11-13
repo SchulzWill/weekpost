@@ -15,6 +15,7 @@ const CONFIG = `export default {
   },
   accounts: { en: { handle: "shop", lang: "en", timeZone: "Europe/London", hemisphere: "north", voice: "george", cta: ["link in bio"], link: { base: "https://shop.example/" } } },
   pillars: ["tip"],
+  stories: { publish: "manual", fallbackAfterMinutes: 60 },
 };
 `;
 
