@@ -210,7 +210,7 @@ describe("weekpost upgrade --plan", () => {
     const c = cap();
     expect(await runUpgrade(["--plan", `--project=${dir}`], c.out, dir, deps({ templateRoot }))).toBe(0);
     expect(c.text()).toContain("edited = you changed it; the diff shows your version (-) against the new one (+); upgrade will not overwrite it without asking");
-    expect(c.text()).toContain("Applying it isn't available yet: to take the new files now, copy them by hand from the diffs above and commit.");
+    expect(c.text()).toContain("`weekpost upgrade --apply` (in a terminal) will: 1) apply pending migrations");
     append(dir, "AGENTS.md", "\nunsaved\n");
     const b = cap();
     expect(await runUpgrade(["--plan", `--project=${dir}`], b.out, dir, deps({ templateRoot }))).toBe(1);
@@ -313,11 +313,10 @@ describe("weekpost upgrade --plan", () => {
     const h = cap();
     expect(await runUpgrade(["--help"], h.out, dir)).toBe(0);
     expect(h.text()).toContain("usage: weekpost upgrade --plan");
-    expect(h.text()).toContain("Run after installing a new weekpost: lists what it would change in this project. Writes nothing.");
+    expect(h.text()).toContain("lists what the upgrade would change in this project. Writes nothing.");
     expect(await main(["upgrade", "--help"])).toBe(0);
     expect(await runUpgrade(["--plan", "--bogus"], c.out, dir)).toBe(2);
-    expect(await runUpgrade(["--apply"], c.out, dir)).toBe(2);
-    expect(c.text()).toContain("not available in this version");
+    expect(await runUpgrade(["--apply", "--plan"], c.out, dir)).toBe(2);
     expect(await main(["upgrade"])).toBe(2);
   });
 });

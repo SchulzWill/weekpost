@@ -137,7 +137,7 @@ export function migrateAction(deps: { pg?: PgFactory; migrations?: Migration[] }
       const pending = pendingAfter(all, (await schemaVersion(ctx)) ?? 0);
       if (pending.length === 0) return;
       io.out.log(`\n${printable(pending)}`);
-      io.out.log("  paste the SQL above into the SQL editor of your Supabase project, then run `weekpost setup --apply` again to check it");
+      if (!io.options.quiet) io.out.log("  paste the SQL above into the SQL editor of your Supabase project, then run `weekpost setup --apply` again to check it");
       return;
     }
 

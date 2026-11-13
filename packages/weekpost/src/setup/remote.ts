@@ -1,11 +1,13 @@
 // `--apply` actions for the Worker, GitHub and the local secrets file. Every secret value reaches `wrangler` and `gh`
 // on stdin (never in argv, where `ps` and the shell history would show it) and is held in memory only for the call.
 // The text of a failure never includes the output of the program unless it has been scrubbed of every value we hold.
+import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { readLocalEnv, writeLocalEnv } from "../cli/secrets.ts";
 import { ApplyError, type Action, type Actions, type ApplyIO } from "./apply.ts";
 import { WRANGLER_PKG, type RunResult } from "./runner.ts";
 import { ISSUE_LABEL } from "../metrics/report.ts";
+import { LOCK_FILE } from "./template.ts";
 import { ACTIONS_SECRET, ENVIRONMENT, WORKER_SECRETS } from "./steps.ts";
 
 const WRANGLER = ["--yes", WRANGLER_PKG];
@@ -34,7 +36,21 @@ const supabaseValues = async (io: ApplyIO) => ({
 const workerDeploy: Action = async (io) => {
   await must(io, "wrangler deploy", "npx", [...WRANGLER, "deploy"], { cwd: workerDir(io) });
   io.out.log("  Worker deployed");
+  clearDeployPending(io.context().projectRoot);
 };
+
+/** A deploy owed by `weekpost upgrade --apply` is paid: drop the flag from the lock (only when it is there). */
+function clearDeployPending(projectRoot: string): void {
+  const file = join(projectRoot, LOCK_FILE);
+  try {
+    const lock = JSON.parse(readFileSync(file, "utf8")) as Record<string, unknown>;
+    if (lock.deployPending === undefined) return;
+    delete lock.deployPending;
+    writeFileSync(file, `${JSON.stringify(lock, null, 2)}\n`);
+  } catch {
+    /* no lock, or one we cannot read: nothing to clear */
+  }
+}
 
 const workerSecrets: Action = async (io) => {
   const { url, key } = await supabaseValues(io);
