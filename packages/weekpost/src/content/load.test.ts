@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import { testConfig } from "./fixtures.ts";
 import { checkContent as check } from "./load.ts";
 
-const config = testConfig();
+const config = testConfig({ stories: { publish: "manual", fallbackAfterMinutes: 60 } });
 const checkContent = (root: string, only?: string) => check(root, config, only);
 
 function tree(files: Record<string, string>) {

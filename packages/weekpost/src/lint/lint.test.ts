@@ -93,6 +93,38 @@ describe("lintPost", () => {
     });
   });
 
+  describe("Story link promises and deadline", () => {
+    const AUTO = testConfig({ stories: { publish: "auto", fallbackAfterMinutes: null } });
+    const story = (text: string, cta: string, extra: Record<string, unknown> = {}) =>
+      post({ type: "story", slides: undefined, story: { text: { a: text, b: text }, ...extra }, cta: { a: cta, b: cta } });
+
+    it("rejects tap phrases in an automatic Story, in text and cta", () => {
+      expect(errors(story("Toque no link.", "Veja o link na bio."), AUTO).some((i) => i.where.endsWith("a story.text") && /link sticker/.test(i.message))).toBe(true);
+      expect(errors(story("Vagas.", "Arraste para cima."), AUTO).some((i) => i.where.endsWith("b cta"))).toBe(true);
+      const en = post({ accounts: ["en"], times: { en: "12:00" }, type: "story", slides: undefined, story: { text: { en: "Tap the link" } }, cta: { en: "Link in bio" } });
+      expect(errors(en, AUTO).some((i) => i.where.endsWith("en story.text"))).toBe(true);
+    });
+
+    it("accepts the same phrases in a manual Story, and none in an automatic one", () => {
+      const manual = testConfig({ stories: { publish: "manual", fallbackAfterMinutes: 60 } });
+      expect(errors(story("Toque no link.", "Clique no link.", { link_utm_content: "s" }), manual)).toEqual([]);
+      expect(errors(story("Vagas.", "Veja o link na bio."), AUTO)).toEqual([]);
+    });
+
+    it("a post's own publish mode wins over the config", () => {
+      expect(errors(story("Toque no link.", "Link na bio.", { publish: "auto" }), testConfig({ stories: { publish: "manual", fallbackAfterMinutes: 60 } })).length).toBeGreaterThan(0);
+    });
+
+    it("warns about a missing deadline only for manual Stories without a fallback", () => {
+      const warns = (cfg: ReturnType<typeof testConfig>, extra: Record<string, unknown> = {}) =>
+        lintPost(story("Vagas.", "Link na bio.", { link_utm_content: "s", ...extra }), cfg).filter((i) => i.level === "warn" && /no deadline/.test(i.message));
+      expect(warns(testConfig())).toHaveLength(1);
+      expect(warns(testConfig({ stories: { publish: "manual", fallbackAfterMinutes: 30 } }))).toHaveLength(0);
+      expect(warns(AUTO)).toHaveLength(0);
+      expect(warns(AUTO, { publish: "manual" })).toHaveLength(1);
+    });
+  });
+
   describe("en account", () => {
     const EN_NOTE = "Informational content only.";
     const en = (over: Record<string, unknown> = {}) => post({

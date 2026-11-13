@@ -4,6 +4,7 @@ import { dirname, join, resolve } from "node:path";
 import { parse } from "yaml";
 import type { WeekpostConfig } from "../config/schema.ts";
 import { lintPost } from "../lint/core.ts";
+import { guarded } from "../lint/plugin.ts";
 import { checkRealImages } from "../media/realImage.ts";
 import type { Issue, Post } from "./post.ts";
 import { validateWeek, type Contract } from "./week.ts";
@@ -76,6 +77,11 @@ export function checkContent(root: string, config: WeekpostConfig, only?: string
       if (other && other !== week) issues.push({ level: "error", where: `${post.id} id`, message: `id already used in ${other}` });
       firstSeen.set(post.id, week);
       const found = [...lintPost(post, config), ...checkMusic(post, projectDir), ...checkRealImages(post, join(root, week))];
+      lint.push(...found);
+      issues.push(...found);
+    }
+    for (const plugin of config.lint.plugins) {
+      const found = guarded(plugin, week, () => plugin.lintWeek?.(result.posts, { config, week })).map((i) => ({ ...i, where: i.where || week }));
       lint.push(...found);
       issues.push(...found);
     }

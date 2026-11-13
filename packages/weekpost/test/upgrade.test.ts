@@ -260,7 +260,8 @@ describe("weekpost upgrade --plan", () => {
     const future = await plan(dir);
     expect(future.code).toBe(1);
     expect(future.json.blockers.map((b: any) => b.week)).toEqual(["2027-W09"]);
-    expect(future.json.content.warnings.every((w: any) => w.week === "2026-W42")).toBe(true);
+    // The future week has no lint warning of its own besides the missing-deadline notice every manual Story gets.
+    expect(future.json.content.warnings.filter((w: any) => !/no deadline/.test(w.message)).every((w: any) => w.week === "2026-W42")).toBe(true);
   });
 
   it("blocks on a downgrade, on uncommitted generated files and on a config that does not load", async () => {
