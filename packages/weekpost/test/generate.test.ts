@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createHash } from "node:crypto";
@@ -90,6 +90,42 @@ describe("weekpost generate --fake-media", () => {
     expect(html).toContain("@hortaviva");
     expect(html).toContain("Week cost");
     expect(manifest.posts[1].accounts.en.music).toBe("calm");
+  }, 120_000);
+
+  it("renders an auto Story with one art, and a manual Story with two (the AI image is made once)", async () => {
+    const story = (id: string, publish: string) => `  - id: ${id}
+    date: 2026-10-13
+    type: story
+    accounts: [en]
+    times: { en: "10:00" }
+    pillar: tip
+    story: { text: { en: "Water early." }, publish: ${publish}, link_utm_content: ${id}, image_prompt: "a can" }
+    caption: { en: "Caption." }
+    cta: { en: "Link in bio." }
+    link: { en: "https://hortaviva.example/?utm_source=instagram&utm_medium=social&utm_campaign=en&utm_content=${id}" }
+`;
+    writeFileSync(join(dir, "content", "2026-W42", "posts.yaml"), `version: 1\nposts:\n${story("2026-10-13-story-a", "auto")}${story("2026-10-13-story-m", "manual")}`);
+    const input = testConfig();
+    input.accounts = { en: input.accounts.en };
+    writeFileSync(join(dir, "weekpost.config.ts"), `export default ${JSON.stringify({ ...input, stories: { publish: "manual", fallbackAfterMinutes: 90 } })};\n`);
+    const lines: string[] = [];
+    const out = { log: (l: string) => lines.push(l), error: (l: string) => lines.push(l) };
+    expect(await runGenerate(["2026-W42", "--fake-media"], out, dir)).toBe(0);
+    const week = join(dir, "out", "2026-W42");
+    expect(existsSync(join(week, "2026-10-13-story-a/en/story.jpg"))).toBe(true);
+    expect(existsSync(join(week, "2026-10-13-story-a/en/story-manual.jpg"))).toBe(false);
+    expect(existsSync(join(week, "2026-10-13-story-m/en/story-manual.jpg"))).toBe(true);
+    const manifest = manifestSchema.parse(JSON.parse(readFileSync(join(week, "manifest.json"), "utf8")));
+    const [auto, manual] = manifest.posts;
+    expect(auto.storyMode).toBe("auto");
+    expect(auto.accounts.en.manual).toBeUndefined();
+    expect(auto.accounts.en.caption).toContain("Publishes on its own");
+    expect(manual).toMatchObject({ storyMode: "manual", fallbackAfterMinutes: 90 });
+    expect(manual.accounts.en).toMatchObject({ publish: ["2026-10-13-story-m/en/story.jpg"], manual: "2026-10-13-story-m/en/story-manual.jpg" });
+    expect(manual.accounts.en.caption).toContain("until 11:30");
+    expect(verifyManifest(manifest, week)).toEqual([]);
+    // Same prompt, same cache entry: the second Story and its second art cost no extra image.
+    expect(readdirSync(join(dir, "out", ".cache-fake", "images")).length).toBe(1);
   }, 120_000);
 
   it("--post renders only that post", async () => {

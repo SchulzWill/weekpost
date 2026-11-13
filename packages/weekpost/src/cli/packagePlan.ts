@@ -1,12 +1,21 @@
 // Plan for `weekpost package`: a folder per day and account, a subfolder per post, with the media exactly as
 // published plus the caption, the schedule and the link, for publishing by hand.
 import type { Manifest } from "../render/manifest.ts";
+import { fallbackTime } from "../content/storyMode.ts";
 import type { Post } from "../content/post.ts";
 
 export type PackageItem = { dir: string; files: { from: string; to: string }[]; texts: Record<string, string> };
 export type AccountInfo = { handle: string; timeZone: string };
 
 const baseName = (file: string) => file.split("/").pop()!;
+
+// Story only: how it goes out, in one line for time.txt (empty for other posts, so they stay as they were).
+function storyLine(post: Manifest["posts"][number], time: string): string {
+  if (post.type !== "story") return "";
+  if (post.storyMode === "auto") return "publishing: it goes out on its own, no need to post it\n";
+  if (post.fallbackAfterMinutes == null) return "publishing: post it by hand with the link sticker\n";
+  return `publishing: post it by hand with the link sticker until ${fallbackTime(time, post.fallbackAfterMinutes)}; after that it goes out without the sticker\n`;
+}
 
 // Posts with an error in the manifest, or missing from it, are skipped.
 export function packagePlan(manifest: Manifest, posts: Post[], accounts: Record<string, AccountInfo>): PackageItem[] {
@@ -21,7 +30,8 @@ export function packagePlan(manifest: Manifest, posts: Post[], accounts: Record<
       if (!media) continue;
       const time = post.times[acc] ?? "";
       const info = accounts[acc];
-      const files = media.publish.map((from) => ({ from, to: baseName(from) }));
+      // A Story posted by hand gets the art with the free strip for the link sticker, not the one the API would publish.
+      const files = (post.type === "story" && media.manual ? [media.manual] : media.publish).map((from) => ({ from, to: baseName(from) }));
       // A Reel cover has the same name in every post folder, so it never collides with the video.
       if (media.cover) files.push({ from: media.cover, to: baseName(media.cover) });
       items.push({
@@ -29,7 +39,7 @@ export function packagePlan(manifest: Manifest, posts: Post[], accounts: Record<
         files,
         texts: {
           "caption.txt": `${media.caption}\n`,
-          "time.txt": `date: ${post.date}\ntime: ${time}\ntime zone: ${generated.timeZones[acc] ?? info?.timeZone ?? ""}\naccount: ${info ? `@${info.handle}` : acc}\ntype: ${post.type}\npost: ${post.id}\n`,
+          "time.txt": `date: ${post.date}\ntime: ${time}\ntime zone: ${generated.timeZones[acc] ?? info?.timeZone ?? ""}\naccount: ${info ? `@${info.handle}` : acc}\ntype: ${post.type}\npost: ${post.id}\n${storyLine(generated, time)}`,
           "link.txt": `${post.link?.[acc] ?? ""}\n`,
         },
       });

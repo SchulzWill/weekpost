@@ -2,6 +2,7 @@
 // image-versus-text "review" flags. Relative paths, so the page opens locally and from any static host.
 // The interface is in English; captions and texts stay in each account's language.
 import { esc } from "./brand.ts";
+import { fallbackTime } from "../content/storyMode.ts";
 import type { Manifest } from "./manifest.ts";
 
 /** What the page needs from the config to label an account. */
@@ -35,6 +36,18 @@ function media(file: string, label: string, publish: string[] = []) {
   return `<a href="${esc(file)}" target="_blank"><img loading="lazy" src="${esc(file)}" alt="${esc(label)}"></a>`;
 }
 
+// Badge of a Story: how it is published and, for a manual one, when it goes out without the sticker.
+function storyBadge(p: Manifest["posts"][number], time: string): string {
+  if (p.type !== "story" || !p.storyMode) return "";
+  const text =
+    p.storyMode === "auto"
+      ? "auto: publishes on its own"
+      : p.fallbackAfterMinutes == null
+        ? "manual: post it by hand with the link sticker"
+        : `manual: post it by hand until ${fallbackTime(time, p.fallbackAfterMinutes)}, then it goes out without the sticker`;
+  return ` <span class="badge">${esc(text)}</span>`;
+}
+
 export function previewHtml(m: Manifest, labels: PreviewAccounts = {}): string {
   const posts = m.posts
     .map((p) => {
@@ -44,7 +57,7 @@ export function previewHtml(m: Manifest, labels: PreviewAccounts = {}): string {
         : "";
       const accounts = Object.entries(p.accounts)
         .map(
-          ([acc, a]) => `<div class="acc" lang="${esc(labels[acc]?.lang ?? "")}"><h3>@${esc(labels[acc]?.handle ?? acc)} · ${esc(p.times[acc] ?? "")}${p.timeZones[acc] ? ` (${esc(p.timeZones[acc])})` : ""}</h3>
+          ([acc, a]) => `<div class="acc" lang="${esc(labels[acc]?.lang ?? "")}"><h3>@${esc(labels[acc]?.handle ?? acc)} · ${esc(p.times[acc] ?? "")}${p.timeZones[acc] ? ` (${esc(p.timeZones[acc])})` : ""}${storyBadge(p, p.times[acc] ?? "00:00")}</h3>
 <div class="grid">${a.cover ? `<figure>${media(a.cover, `${p.id} ${acc} cover`)}<figcaption>cover</figcaption></figure>` : ""}${a.files.map((f, i) => media(f, `${p.id} ${acc} ${i + 1}`, a.publish)).join("")}</div>
 ${a.audio ? `<audio controls preload="none" src="${esc(a.audio)}"></audio>` : ""}
 ${a.music ? `<p class="music">Music: ${esc(a.music)}</p>` : ""}
@@ -68,6 +81,7 @@ figure{margin:0}figcaption{font-size:13px;color:var(--muted);margin-top:4px}.acc
 .caption{white-space:pre-wrap;overflow-wrap:anywhere;font:13px/1.4 ui-monospace,monospace;background:var(--bg);padding:8px;border-radius:6px}
 .review{background:var(--warn-bg);color:var(--warn-fg);padding:8px 8px 8px 28px;border-radius:8px}
 .error{background:var(--danger);padding:8px;border-radius:8px}audio{width:100%;max-width:480px}
+.badge{font-size:12px;font-weight:600;padding:2px 8px;border-radius:999px;background:var(--bg);border:1px solid var(--border);margin-left:6px}
 a:focus-visible{outline:3px solid var(--primary);outline-offset:2px}
 </style></head><body>
 <h1>Preview ${esc(m.week)}</h1>

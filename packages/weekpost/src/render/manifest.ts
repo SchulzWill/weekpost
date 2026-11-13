@@ -26,17 +26,20 @@ const accountSchema = z
     publish: z.array(mediaPath).min(1).max(10),
     // Reel cover (cover_url); without it the platform uses the first frame.
     cover: mediaPath.optional(),
+    // Story published by hand: the art with the strip left free for the link sticker (`publish` holds the one with the CTA card).
+    manual: mediaPath.optional(),
     audio: audioPath.optional(),
     music: z.string().max(300).optional(),
     caption: z.string().max(10_000),
-    // Hash of each file in `publish` and of `cover`.
+    // Hash of each file in `publish` and of `cover` and `manual`.
     sha256: z.record(mediaPath, sha256),
   })
   .superRefine((a, ctx) => {
     for (const f of a.publish) if (!a.files.includes(f)) ctx.addIssue({ code: "custom", path: ["publish"], message: `${f} is in publish but not listed in files` });
-    const pinned = new Set([...a.publish, ...(a.cover ? [a.cover] : [])]);
+    if (a.manual && !a.files.includes(a.manual)) ctx.addIssue({ code: "custom", path: ["manual"], message: `${a.manual} is the manual art but is not listed in files` });
+    const pinned = new Set([...a.publish, ...(a.cover ? [a.cover] : []), ...(a.manual ? [a.manual] : [])]);
     for (const f of pinned) if (!(f in a.sha256)) ctx.addIssue({ code: "custom", path: ["sha256", f], message: `missing sha256 for ${f}` });
-    for (const f of Object.keys(a.sha256)) if (!pinned.has(f)) ctx.addIssue({ code: "custom", path: ["sha256", f], message: `sha256 for ${f}, which is neither in publish nor the cover` });
+    for (const f of Object.keys(a.sha256)) if (!pinned.has(f)) ctx.addIssue({ code: "custom", path: ["sha256", f], message: `sha256 for ${f}, which is neither in publish, the cover nor the manual art` });
   });
 
 export const manifestSchema = z.strictObject({
@@ -57,6 +60,9 @@ export const manifestSchema = z.strictObject({
         timeZones: z.record(accountId, z.string().max(64)),
         // sha-256 of the post as written in posts.yaml (see content/hash.ts).
         contentHash: sha256,
+        // Story only: how it is published, and for a manual one the minutes after its time at which it goes out on its own (null: never).
+        storyMode: z.enum(["auto", "manual"]).optional(),
+        fallbackAfterMinutes: z.number().int().min(15).max(1380).nullable().optional(),
         accounts: z.record(accountId, accountSchema),
         coherence: z.array(z.strictObject({ index: z.number().int(), shows: z.boolean(), reason: z.string().max(2000) })).max(200),
         // A post with an error is not queued.

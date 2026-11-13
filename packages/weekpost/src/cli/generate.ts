@@ -21,6 +21,7 @@ import { MANIFEST_VERSION, manifestSchema, sha256File, verifyManifest, type Mani
 import { previewHtml } from "../render/preview.ts";
 import { backgroundArgs, captionCues, chromeHtml, coverSecond, CTA_CARD_SECONDS, ctaCardHtml, cueHtml, mediaDuration, reelArgs, reelOverlays, runFfmpeg, segmentTextHtml, SIZE } from "../render/reel.ts";
 import { storyHtml } from "../render/story.ts";
+import { fallbackTime, storyMode } from "../content/storyMode.ts";
 import { checkContent } from "../content/load.ts";
 import { captionFor } from "../lint/caption.ts";
 import { contentHash } from "../content/hash.ts";
@@ -121,10 +122,29 @@ export async function runGenerate(args: string[], out: Out = console, cwd = proc
   async function story(post: Extract<Post, { type: "story" }>, render: Render, entry: Manifest["posts"][number]) {
     const [img] = await images(post);
     if (img) entry.coherence.push({ index: 0, ...(await checkCoherence({ imagePath: img, text: firstText(post.story.text), item: `${post.id}#1`, ...judge }, deps)) });
+    const mode = storyMode(post, config);
+    const fallback = config.stories.fallbackAfterMinutes;
+    entry.storyMode = mode;
+    if (mode === "manual") entry.fallbackAfterMinutes = fallback;
     for (const acc of accountsOf(post)) {
-      const out = join(outDir, post.id, acc, "story.jpg");
-      await render(storyHtml(brand, post.story, acc, img ? pathToFileURL(img).href : undefined), out, { width: 1080, height: 1920 });
-      entry.accounts[acc] = { files: [rel(out)], publish: [rel(out)], sha256: pin([rel(out)]), caption: `${post.story.text[acc] ?? ""}\n\n[Link sticker, added when publishing: ${post.link?.[acc] ?? ""}]` };
+      const art = join(outDir, post.id, acc, "story.jpg");
+      const imageUrl = img ? pathToFileURL(img).href : undefined;
+      // story.jpg is what the API publishes: the strip carries the account CTA, since a link sticker cannot be added.
+      await render(storyHtml(brand, post.story, acc, imageUrl, { cta: post.cta[acc] }), art, { width: 1080, height: 1920 });
+      const text = post.story.text[acc] ?? "";
+      const link = post.link?.[acc] ?? "";
+      if (mode === "auto") {
+        entry.accounts[acc] = { files: [rel(art)], publish: [rel(art)], sha256: pin([rel(art)]), caption: `${text}\n\n[Publishes on its own, without a link sticker.]` };
+        continue;
+      }
+      // The version for posting by hand keeps the strip free for the link sticker.
+      const manual = join(outDir, post.id, acc, "story-manual.jpg");
+      await render(storyHtml(brand, post.story, acc, imageUrl), manual, { width: 1080, height: 1920 });
+      const note =
+        fallback === null
+          ? `Post by hand with the link sticker: ${link}`
+          : `Post by hand with the link sticker until ${fallbackTime(post.times[acc] ?? "00:00", fallback)}; after that it goes out without the sticker. Link: ${link}`;
+      entry.accounts[acc] = { files: [rel(art), rel(manual)], publish: [rel(art)], manual: rel(manual), sha256: pin([rel(art), rel(manual)]), caption: `${text}\n\n[${note}]` };
     }
   }
 
