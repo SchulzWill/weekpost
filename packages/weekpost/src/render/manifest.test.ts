@@ -45,6 +45,15 @@ const reelManifest = (): Manifest => {
   return m;
 };
 
+const storyManifest = (): Manifest => {
+  const m = valid();
+  m.posts[0] = {
+    ...m.posts[0], id: "s", type: "story", storyMode: "manual", fallbackAfterMinutes: 120,
+    accounts: { en: { files: ["s/en/story.jpg", "s/en/story-manual.jpg"], publish: ["s/en/story.jpg"], manual: "s/en/story-manual.jpg", caption: "x", sha256: { "s/en/story.jpg": HASH, "s/en/story-manual.jpg": HASH } } },
+  };
+  return m;
+};
+
 const issues = (m: unknown) => {
   const r = manifestSchema.safeParse(m);
   return r.success ? [] : r.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`);
@@ -55,6 +64,19 @@ describe("manifest v1 schema", () => {
     expect(MANIFEST_VERSION).toBe(1);
     expect(issues(valid())).toEqual([]);
     expect(issues(reelManifest())).toEqual([]);
+  });
+
+  it("accepts a manual Story, and requires its manual art to be in files and hashed", () => {
+    expect(issues(storyManifest())).toEqual([]);
+    const outside = storyManifest();
+    outside.posts[0].accounts.en.files = ["s/en/story.jpg"];
+    expect(issues(outside).join()).toMatch(/manual art but is not listed in files/);
+    const unhashed = storyManifest();
+    delete unhashed.posts[0].accounts.en.sha256["s/en/story-manual.jpg"];
+    expect(issues(unhashed).join()).toMatch(/missing sha256 for s\/en\/story-manual\.jpg/);
+    const stray = storyManifest();
+    delete stray.posts[0].accounts.en.manual;
+    expect(issues(stray).join()).toMatch(/sha256/);
   });
 
   it("accepts a post that failed, with no accounts", () => {
