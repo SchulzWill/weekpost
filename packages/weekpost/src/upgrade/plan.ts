@@ -113,8 +113,7 @@ const readDisk = (projectRoot: string, path: string): Buffer | null => {
 
 const isText = (b: Buffer) => !b.includes(0);
 
-function planFiles(projectRoot: string, lock: Lock | null, answers: Answers, templateRoot: string, today: Date): { files: FileEntry[]; unchanged: number } {
-  const next = new Map(renderTemplate(answers, { root: templateRoot, today }).filter((f) => !isUserOwned(f.path)).map((f) => [f.path, f.content]));
+function planFiles(projectRoot: string, lock: Lock | null, next: Map<string, Buffer>): { files: FileEntry[]; unchanged: number } {
   const locked = Object.fromEntries(Object.entries(lock?.files ?? {}).filter(([p]) => !isUserOwned(p)));
   const files: FileEntry[] = [];
   let unchanged = 0;
@@ -126,7 +125,7 @@ function planFiles(projectRoot: string, lock: Lock | null, answers: Answers, tem
     const content = next.get(path);
     const disk = readDisk(projectRoot, path);
     if (!content) {
-      if (disk) files.push({ path, state: "removed", note: "no longer part of the template" });
+      if (disk && path in locked) files.push({ path, state: "removed", note: "no longer part of the template" });
       continue;
     }
     const newHash = sha256(content);
@@ -160,7 +159,14 @@ async function gitDirty(run: Runner, projectRoot: string, paths: string[]): Prom
   return { dirty: status.stdout.split("\n").filter(Boolean).map((l) => l.slice(3).trim()) };
 }
 
+/** What `--apply` needs besides the plan: the lock it read, the new generated files and what they were rendered with. */
+export type PlanInputs = { lock: Lock | null; answers: Answers | null; today: Date; next: Map<string, Buffer>; installed: string };
+
 export async function planUpgrade(projectRoot: string, deps: PlanDeps = {}): Promise<UpgradePlan> {
+  return (await planUpgradeFull(projectRoot, deps)).plan;
+}
+
+export async function planUpgradeFull(projectRoot: string, deps: PlanDeps = {}): Promise<{ plan: UpgradePlan; inputs: PlanInputs }> {
   const installed = deps.installed ?? packageVersion();
   const now = deps.now ?? new Date();
   const run = deps.run ?? spawnRunner;
@@ -198,8 +204,10 @@ export async function planUpgrade(projectRoot: string, deps: PlanDeps = {}): Pro
   const today = lock?.renderedOn && !Number.isNaN(Date.parse(lock.renderedOn)) ? new Date(lock.renderedOn) : now;
 
   // The file plan comes before the git check, which only looks at files the plan touches.
+  const next = new Map<string, Buffer>();
   if (answers) {
-    const { files, unchanged } = planFiles(projectRoot, lock, answers, templateRoot, today);
+    for (const f of renderTemplate(answers, { root: templateRoot, today })) if (!isUserOwned(f.path)) next.set(f.path, f.content);
+    const { files, unchanged } = planFiles(projectRoot, lock, next);
     plan.files = files;
     plan.unchanged = unchanged;
     plan.toChange = files.filter((f) => f.state !== "record").length;
@@ -239,5 +247,5 @@ export async function planUpgrade(projectRoot: string, deps: PlanDeps = {}): Pro
   }
 
   plan.blocked = blockers.length > 0;
-  return plan;
+  return { plan, inputs: { lock, answers, today, next, installed } };
 }

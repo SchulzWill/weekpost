@@ -1,11 +1,19 @@
 // weekpost upgrade --plan [--json] [--project=<dir>]
-// Reads the project and says what moving to the installed weekpost would do. It never writes: no file, no database,
-// no GitHub. It exits 1 when something blocks the upgrade. (`--apply` is not part of this version.)
+// weekpost upgrade --apply [--print] [--project=<dir>]
+// `--plan` reads the project and says what moving to the installed weekpost would do. It never writes: no file, no
+// database, no GitHub. It exits 1 when something blocks the upgrade.
+// `--apply` carries the plan out. It changes the database and the Worker, so it needs a terminal and asks before each
+// step; there is no --yes. An agent shell has no terminal, so an agent can run --plan but never --apply.
+import { applyUpgrade, type ApplyUpgradeDeps } from "../upgrade/apply.ts";
 import { planUpgrade, type PlanDeps, type UpgradePlan } from "../upgrade/plan.ts";
 import { projectPaths, type Out } from "./check.ts";
+import { hasTty, requireTty } from "./secrets.ts";
 
-const USAGE = "usage: weekpost upgrade --plan [--json]   (--project=<dir>)";
-const HELP = `${USAGE}\nRun after installing a new weekpost: lists what it would change in this project. Writes nothing.`;
+const USAGE = "usage: weekpost upgrade --plan [--json] | --apply [--print]   (--project=<dir>)";
+const HELP = `${USAGE}
+Run after installing a new weekpost.
+  --plan   lists what the upgrade would change in this project. Writes nothing.
+  --apply  does it, at a terminal, asking before each step: database first, then files, then the Worker.`;
 const LEGEND = "update = we replace it (you never touched it) · edited = you changed it; the diff shows your version (-) against the new one (+); upgrade will not overwrite it without asking · new = we add it · removed = we delete it · record = identical to the new file; only added to the lock";
 
 const tag = (n: number, title: string) => `${n}. ${title}`;
@@ -56,11 +64,11 @@ export function renderUpgradePlan(plan: UpgradePlan, out: Out): void {
   } else if (plan.lockVersion === plan.installed) {
     out.log(`\nAlready on ${plan.installed} (the lock matches the installed version); nothing to upgrade.`);
   } else {
-    out.log("\nNothing blocks the upgrade. Applying it isn't available yet: to take the new files now, copy them by hand from the diffs above and commit.");
+    out.log("\nNothing blocks the upgrade. To apply it, run `weekpost upgrade --apply` in a terminal.");
   }
 }
 
-export type UpgradeDeps = PlanDeps;
+export type UpgradeDeps = PlanDeps & ApplyUpgradeDeps & { tty?: boolean };
 
 // Returns the exit code.
 export async function runUpgrade(args: string[], out: Out = console, cwd = process.cwd(), deps: UpgradeDeps = {}): Promise<number> {
@@ -68,9 +76,18 @@ export async function runUpgrade(args: string[], out: Out = console, cwd = proce
     out.log(HELP);
     return 0;
   }
-  if (args.includes("--apply")) {
-    out.error("upgrade --apply is not available in this version; use `weekpost upgrade --plan` to see what an upgrade would change");
+  if (args.includes("--yes") || args.includes("-y")) {
+    out.error("upgrade has no --yes: it changes the database and the Worker, so it always asks you at a terminal");
     return 2;
+  }
+  if (args.includes("--apply")) {
+    if (args.includes("--plan") || args.some((a) => a !== "--apply" && a !== "--print" && !a.startsWith("--project="))) {
+      out.error(USAGE);
+      return 2;
+    }
+    const blocked = requireTty("upgrade --apply", out, deps.tty ?? hasTty());
+    if (blocked) return blocked;
+    return applyUpgrade(projectPaths(args, cwd).projectRoot, out, { ...deps, print: args.includes("--print") });
   }
   const known = (a: string) => a === "--plan" || a === "--json" || a.startsWith("--project=");
   if (!args.includes("--plan") || args.some((a) => !known(a))) {

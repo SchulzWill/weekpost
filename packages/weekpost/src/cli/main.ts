@@ -47,7 +47,7 @@ commands:
   token <account>       save the Instagram token of an account; finds out whether it is an Instagram Login or a Unified login token (--login=instagram|unified to say it yourself, --prompt to type it instead of reading the clipboard; needs a terminal)
   sources pull <YYYY-Www>  write content/<week>/sources.json from the configured sources (the week before; --limit=20, --root=content, --project=<dir>)
   setup --plan|--apply  list the setup steps and what is done (--plan, --json), or run them at a terminal after asking (--apply, --only=<step-id>)
-  upgrade --plan        say what moving to the installed version would change, without writing anything (--json)
+  upgrade --plan|--apply  say what moving to the installed version would change (--plan, --json), or do it at a terminal after asking (--apply, --print)
   doctor                check, without writing anything, that the setup works and say what to run for each failure (--json)
   metrics               read Instagram Insights and print the weekly report (--write to store it, --issue to post it as an issue, --json)
   first-post <account>  publish one public test post through your own Worker and wait for the permalink (--caption=<text>, --yes, --timeout=15 minutes)

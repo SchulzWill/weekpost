@@ -2,6 +2,7 @@
   "permissions": {
     "deny": [
       "Bash(*weekpost*setup*--apply*)",
+      "Bash(*weekpost*upgrade*--apply*)",
       "Bash(*weekpost* token*)",
       "Bash(*weekpost* first-post*)",
       "Bash(*weekpost* enqueue*)",
