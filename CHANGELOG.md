@@ -12,6 +12,7 @@ How a release is cut: see [Releasing](docs/releasing.md).
 
 ### Improvements
 
+- `weekpost resolve` now closes a manual Story (one weekpost does not post, which you post by hand): `--published` after you post it (link optional), `--not-published` to cancel it.
 - Groundwork for optional automatic Stories: the queue now records whether each post is published automatically or by hand (`publish_mode`: `auto` or `manual`), and for a hand-posted Story, a time after which weekpost may publish it itself (`fallback_at`). Nothing uses this yet: Stories are still never published by weekpost.
 - `weekpost enqueue` queues each Story by its publish mode: a manual Story as `manual` with its fallback deadline (`publish time + stories.fallbackAfterMinutes`). weekpost does not publish Stories itself yet, so a Story set to `auto` is queued as `manual` with no deadline and enqueue warns: post it by hand. Changing a Story's mode in the YAML switches a queued row that is still `scheduled` or `manual`; the preview must come from the same mode (otherwise run `generate` again). A Story whose time (or fallback time, for a manual one) has passed is skipped unless `--allow-past`, and `restore` follows the same rule.
 - When a manual Story's fallback falls after midnight, the package, `time.txt` and the preview now say "(next day)".

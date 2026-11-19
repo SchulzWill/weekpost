@@ -30,6 +30,7 @@ export function statusLine(r: QueueRow, zones: Zones): string {
   const zone = zones[r.account];
   const bits = [`${label(r)}`, r.status.padEnd(10), `${formatLocal(r.publishAt, zone)} ${zone ?? "UTC"}`];
   if (r.rescheduledAt) bits.push("(time set by the CLI)");
+  if (r.publishMode === "manual" && r.status !== "manual") bits.push("(Story, posted by hand)");
   if (r.attempts > 0 && r.status !== "published") bits.push(`attempts ${r.attempts}`);
   if (r.status === "published" && r.permalink) bits.push(r.permalink);
   if (r.status === "canceled") bits.push(`(canceled by the ${r.canceledBy === "enqueue" ? "enqueue" : "operator"})`);
@@ -94,16 +95,31 @@ export function planReschedule(r: QueueRow, publishAt: string, opts: { rearm: bo
 }
 
 export type Outcome = { published: true; permalink: string } | { published: false };
+/** What `resolve` was asked: the link is optional for a manual Story (it is only required for a row stuck in publishing). */
+export type ResolveAction = { published: true; permalink?: string } | { published: false };
 
-export function planResolve(r: QueueRow, outcome: Outcome, now: Date): Change {
-  if (r.status !== "publishing") return refuse(r, `cannot resolve ${label(r)}: status is ${r.status}; only a row stuck in publishing can be resolved`);
+/** A manual Story: waiting to be posted by hand, or `scheduled` again after an automatic try failed. */
+export const isManualStory = (r: QueueRow) => r.status === "manual" || (r.status === "scheduled" && r.publishMode === "manual");
+
+export function planResolve(r: QueueRow, action: ResolveAction, now: Date): Change {
+  if (isManualStory(r)) return planResolveManual(r, action);
+  if (r.status !== "publishing") return refuse(r, `cannot resolve ${label(r)}: status is ${r.status}; only a row stuck in publishing or a manual Story can be resolved`);
   const since = r.claimedAt ? now.getTime() - new Date(r.claimedAt).getTime() : Infinity;
   if (since < STUCK_AFTER_MINUTES * 60_000) {
     return refuse(r, `cannot resolve ${label(r)}: it has been publishing for ${Math.floor(since / 60_000)} min; wait until ${STUCK_AFTER_MINUTES} min in case the publisher is still working`);
   }
-  if (outcome.published && !/^https:\/\/[^\s]+$/.test(outcome.permalink)) return refuse(r, `--published needs the post's https link, got "${outcome.permalink}"`);
+  if (action.published && !action.permalink) return refuse(r, `a post stuck in publishing needs its link: --published=<https link>`);
+  if (action.published && !/^https:\/\/[^\s]+$/.test(action.permalink!)) return refuse(r, `--published needs the post's https link, got "${action.permalink}"`);
   return {
     ok: true, key: r, before: "publishing",
-    after: outcome.published ? `published (${outcome.permalink})` : "scheduled, attempts reset to 0 (it will be tried again; check Instagram first so it is not posted twice)",
+    after: action.published ? `published (${action.permalink})` : "scheduled, attempts reset to 0 (it will be tried again; check Instagram first so it is not posted twice)",
   };
+}
+
+function planResolveManual(r: QueueRow, action: ResolveAction): Change {
+  if (r.publishMode === undefined) return refuse(r, `cannot resolve ${label(r)}: the database is older than this version; run migration 0007_stories.sql first (npx weekpost upgrade --apply)`);
+  const before = r.status === "manual" ? "manual" : "scheduled (a Story to post by hand)";
+  if (!action.published) return { ok: true, key: r, before, after: "canceled: it will not be posted" };
+  if (action.permalink && !/^https:\/\/[^\s]+$/.test(action.permalink)) return refuse(r, `--published needs the post's https link, got "${action.permalink}"`);
+  return { ok: true, key: r, before, after: `published${action.permalink ? ` (${action.permalink})` : ""}: you posted it by hand` };
 }
