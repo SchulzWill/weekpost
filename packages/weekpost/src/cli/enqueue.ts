@@ -107,7 +107,11 @@ export async function runEnqueue(args: string[], out: Out = console, cwd = proce
   const dryRun = args.includes("--dry-run");
   const allowPast = args.includes("--allow-past");
   const now = (deps.now ?? (() => new Date()))().getTime();
-  const isPast = (r: PlannedRow) => r.status !== "manual" && new Date(r.publishAt).getTime() < now;
+  // A manual Story is judged by its fallback time (none: never past); everything else by its publish time.
+  const isPast = (r: PlannedRow) => {
+    const at = r.status === "manual" ? r.fallbackAt : r.publishAt;
+    return Boolean(at) && new Date(at as string).getTime() < now;
+  };
   const summaryFile = opt("summary");
   if (!artifactDir || !weeksFile) {
     out.error(USAGE);
@@ -155,7 +159,7 @@ export async function runEnqueue(args: string[], out: Out = console, cwd = proce
   }
 
   // 1. Plan every week before writing anything.
-  const plans: { week: string; rows: PlannedRow[]; uploads: Upload[]; skippedAccounts: string[]; weekDir: string; hashes: Record<string, string>; ctx: PlanContext }[] = [];
+  const plans: { week: string; rows: PlannedRow[]; uploads: Upload[]; skippedAccounts: string[]; warnings: string[]; weekDir: string; hashes: Record<string, string>; ctx: PlanContext }[] = [];
   for (const week of weeks) {
     const { weeks: loaded, issues } = checkContent(contentRoot, config, week);
     const errors = issues.filter((i) => i.level === "error");
@@ -169,6 +173,7 @@ export async function runEnqueue(args: string[], out: Out = console, cwd = proce
       const manifest = loadManifest(weekDir, week);
       const hashes = hashFiles(weekDir, manifest);
       const planned = planWeek({ week, posts: loaded[0].posts, manifest, fileHashes: hashes, config, enqueueAccounts: loaded[0].enqueueAccounts });
+      for (const w of planned.warnings) out.log(`warning ${week}: ${w}`);
       if (loaded[0].enqueueAccounts) out.log(`${week}: enqueue_accounts = ${loaded[0].enqueueAccounts.join(", ")}`);
       const ctx: PlanContext = { postAccounts: Object.fromEntries(loaded[0].posts.map((p) => [p.id, p.accounts])), skippedAccounts: planned.skippedAccounts };
       plans.push({ week, ...planned, weekDir, hashes, ctx });
@@ -191,9 +196,9 @@ export async function runEnqueue(args: string[], out: Out = console, cwd = proce
 
   if (dryRun) {
     for (const p of plans) {
-      for (const r of p.rows) out.log(`  ${r.postId}/${r.account} ${r.type} ${r.publishAt} ${r.status ?? "scheduled"} ${r.media.length} file(s)`);
+      for (const r of p.rows) out.log(`  ${r.postId}/${r.account} ${r.type} ${r.publishAt} ${r.status ?? "scheduled"}${r.fallbackAt ? ` (fallback ${r.fallbackAt})` : ""} ${r.media.length} file(s)`);
       for (const s of p.skippedAccounts) out.log(`  skip ${s} (account not in enqueue_accounts)`);
-      for (const r of p.rows.filter(isPast)) out.log(`  past ${r.postId}/${r.account} ${r.publishAt}${allowPast ? "" : " (skipped without --allow-past)"}`);
+      for (const r of p.rows.filter(isPast)) out.log(`  past ${r.postId}/${r.account} ${r.status === "manual" ? r.fallbackAt : r.publishAt}${allowPast ? "" : " (skipped without --allow-past)"}`);
     }
     // With a queue to read (credentials or an injected db) the dry run also shows what would be canceled; it never writes.
     if (deps.db || supabaseEnv) {
@@ -241,7 +246,7 @@ export async function runEnqueue(args: string[], out: Out = console, cwd = proce
         await db.cancel({ postId, account }, "enqueue", stamp);
       }
       await db.insert(decision.insert.map((r) => ({ ...r, ...stamp })));
-      for (const r of decision.update) await db.updateContent({ postId: r.postId, account: r.account }, { ...r, ...stamp }, { revive: r.revive });
+      for (const r of decision.update) await db.updateContent({ postId: r.postId, account: r.account }, { ...r, ...stamp }, { revive: r.revive, mode: r.mode });
       summary.scheduled += decision.insert.length + decision.update.length;
       summary.updated += decision.update.length;
       summary.canceled.push(...decision.cancel);
@@ -250,6 +255,7 @@ export async function runEnqueue(args: string[], out: Out = console, cwd = proce
       out.log(`${p.week}: ${decision.insert.length} new, ${decision.update.length} updated, ${decision.skipped.length} skipped, ${decision.cancel.length} canceled`);
       for (const c of decision.cancel) out.log(`  cancel ${c.key} (${c.reason})`);
       for (const r of decision.update.filter((u) => u.revive)) out.log(`  restore ${r.postId}/${r.account} (canceled earlier when it left the YAML, and it is in it again)`);
+      for (const u of decision.update.filter((x) => x.note)) out.log(`  update ${u.postId}/${u.account} (${u.note})`);
       for (const s of decision.skipped) out.log(`  skip ${s.key} (${s.reason})`);
     }
   } catch (e) {

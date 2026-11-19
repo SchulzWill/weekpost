@@ -14,6 +14,9 @@ How a release is cut: see [Releasing](docs/releasing.md).
 
 - `weekpost resolve` now closes a manual Story (one weekpost does not post, which you post by hand): `--published` after you post it (link optional), `--not-published` to cancel it.
 - Groundwork for optional automatic Stories: the queue now records whether each post is published automatically or by hand (`publish_mode`: `auto` or `manual`), and for a hand-posted Story, a time after which weekpost may publish it itself (`fallback_at`). Nothing uses this yet: Stories are still never published by weekpost.
+- Stories are still never published by weekpost: a Story set to `story.publish: auto` is queued as `manual` and `enqueue` warns; post it by hand. A manual Story's fallback time (`publish time + stories.fallbackAfterMinutes`) is recorded, and nothing happens at it yet.
+- Changing a Story's `story.publish` updates its queued row while it is `scheduled` or `manual`; run `generate` again first. A Story whose fallback time has passed is skipped unless `--allow-past` (`restore` too).
+- When a manual Story's fallback falls after midnight, the package, `time.txt` and the preview now say "(next day)".
 - New [Upgrading](docs/upgrading.md) guide and a README section: the order of the commands, what `upgrade --apply` does to the database, the files and the Worker, `--print`, and the pending-deploy notice.
 - `weekpost doctor` warns when the `gh` login has no `workflow` scope (needed to push `.github/workflows/`, which an upgrade does) and prints `gh auth refresh -s workflow`.
 - `weekpost upgrade --apply` carries out what `--plan` shows, at a terminal: it updates the database, then your files (asking before it replaces one you edited), then the lock, and offers to deploy the Worker. The template denies it to Claude Code and Codex, like `setup --apply`; `upgrade --apply` brings those rule files up to date itself (it asks first if you edited them).

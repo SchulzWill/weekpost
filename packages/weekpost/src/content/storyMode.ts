@@ -6,9 +6,16 @@ export function storyMode(post: Extract<Post, { type: "story" }>, config: Pick<W
   return post.story.publish ?? config.stories.publish;
 }
 
-// Local time (HH:MM) at which a manual Story goes out without the link sticker: the post time plus the fallback delay.
+// How a manual Story with a fallback reads in the package, the caption and the preview. Nothing publishes at the fallback time yet.
+export const manualStoryNote = (time: string, minutes: number): string =>
+  `post it by hand with the link sticker; weekpost does not post it for you yet (fallback time ${fallbackTime(time, minutes)} is recorded only)`;
+
+// Local time (HH:MM) recorded as the fallback time of a manual Story (nothing publishes then yet): the post time plus the fallback delay.
+// Past midnight it is the next day, and the text says so (the queue holds the absolute instant).
 export function fallbackTime(time: string, minutes: number): string {
   const [h, m] = time.split(":").map(Number);
-  const total = (((h * 60 + m + minutes) % 1440) + 1440) % 1440;
-  return `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
+  const raw = h * 60 + m + minutes;
+  const total = ((raw % 1440) + 1440) % 1440;
+  const hhmm = `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
+  return raw >= 1440 ? `${hhmm} (next day)` : hhmm;
 }

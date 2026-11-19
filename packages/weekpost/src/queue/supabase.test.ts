@@ -241,6 +241,13 @@ describe("OperatorDb", () => {
     const story = seq([raw()]);
     await story.db.updateContent(K, { ...c, status: "manual" }, { revive: true });
     expect(body(story.calls[0]!).status).toBe("manual");
+    const manual = seq([raw()]);
+    await manual.db.updateContent(K, { ...c, status: "manual", publishMode: "manual", fallbackAt: "2026-10-13T09:00:00.000Z" }, { revive: true });
+    expect(body(manual.calls[0]!)).toMatchObject({ status: "manual", publish_mode: "manual", fallback_at: "2026-10-13T09:00:00.000Z" });
+    const auto = seq([raw()]);
+    await auto.db.updateContent(K, { ...c, status: "scheduled", publishMode: "auto", fallbackAt: null }, { revive: true });
+    expect(body(auto.calls[0]!)).toMatchObject({ status: "scheduled", publish_mode: "auto", fallback_at: null });
+    expect(body(calls[0]!)).not.toHaveProperty("publish_mode"); // a caller that names no mode leaves it as it is
     await expect(seq([]).db.updateContent(K, c, { revive: true })).rejects.toThrow("no longer canceled by the enqueue");
   });
 
