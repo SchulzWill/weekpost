@@ -69,7 +69,7 @@ describe("pure rules", () => {
   it("reschedule allows scheduled only; failed needs --rearm", () => {
     expect(planReschedule(row(), at, opts).ok).toBe(true);
     expect(planReschedule(row({ type: "story", publishMode: "auto" }), at, opts).ok).toBe(true); // an auto Story is like any other post
-    expect(planReschedule(row({ type: "story", status: "manual", publishMode: "manual" }), at, opts)).toMatchObject({ ok: false, reason: expect.stringContaining("Stories posted by hand") });
+    expect(planReschedule(row({ type: "story", status: "manual", publishMode: "manual" }), at, opts)).toMatchObject({ ok: false, reason: expect.stringContaining("a Story you post by hand") });
     expect(planReschedule(row({ status: "failed", attempts: 3 }), at, opts)).toMatchObject({ ok: false, reason: expect.stringContaining("--rearm") });
     expect(planReschedule(row({ status: "failed", attempts: 3 }), at, { ...opts, rearm: true })).toMatchObject({ ok: true, after: expect.stringContaining("attempts reset to 0") });
   });

@@ -6,6 +6,10 @@ export function storyMode(post: Extract<Post, { type: "story" }>, config: Pick<W
   return post.story.publish ?? config.stories.publish;
 }
 
+// How a manual Story with a fallback reads in the package, the caption and the preview. Nothing publishes at the fallback time yet.
+export const manualStoryNote = (time: string, minutes: number): string =>
+  `post it by hand with the link sticker; weekpost does not post it for you yet (fallback time ${fallbackTime(time, minutes)} is recorded only)`;
+
 // Local time (HH:MM) recorded as the fallback time of a manual Story (nothing publishes then yet): the post time plus the fallback delay.
 // Past midnight it is the next day, and the text says so (the queue holds the absolute instant).
 export function fallbackTime(time: string, minutes: number): string {

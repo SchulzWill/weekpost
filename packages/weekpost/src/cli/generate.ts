@@ -21,7 +21,7 @@ import { MANIFEST_VERSION, manifestSchema, sha256File, verifyManifest, type Mani
 import { previewHtml } from "../render/preview.ts";
 import { backgroundArgs, captionCues, chromeHtml, coverSecond, CTA_CARD_SECONDS, ctaCardHtml, cueHtml, mediaDuration, reelArgs, reelOverlays, runFfmpeg, segmentTextHtml, SIZE } from "../render/reel.ts";
 import { storyHtml } from "../render/story.ts";
-import { fallbackTime, storyMode } from "../content/storyMode.ts";
+import { manualStoryNote, storyMode } from "../content/storyMode.ts";
 import { checkContent } from "../content/load.ts";
 import { captionFor } from "../lint/caption.ts";
 import { contentHash } from "../content/hash.ts";
@@ -143,7 +143,7 @@ export async function runGenerate(args: string[], out: Out = console, cwd = proc
       const note =
         fallback === null
           ? `Post by hand with the link sticker: ${link}`
-          : `Post by hand with the link sticker until ${fallbackTime(post.times[acc] ?? "00:00", fallback)}; weekpost does not post it for you yet. Link: ${link}`;
+          : `${manualStoryNote(post.times[acc] ?? "00:00", fallback).replace(/^./, (c) => c.toUpperCase())}. Link: ${link}`;
       entry.accounts[acc] = { files: [rel(art), rel(manual)], publish: [rel(art)], manual: rel(manual), sha256: pin([rel(art), rel(manual)]), caption: `${text}\n\n[${note}]` };
     }
   }

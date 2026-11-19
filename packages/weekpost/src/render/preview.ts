@@ -2,7 +2,7 @@
 // image-versus-text "review" flags. Relative paths, so the page opens locally and from any static host.
 // The interface is in English; captions and texts stay in each account's language.
 import { esc } from "./brand.ts";
-import { fallbackTime } from "../content/storyMode.ts";
+import { manualStoryNote } from "../content/storyMode.ts";
 import type { Manifest } from "./manifest.ts";
 
 /** What the page needs from the config to label an account. */
@@ -44,7 +44,7 @@ function storyBadge(p: Manifest["posts"][number], time: string): string {
       ? "auto: weekpost does not post Stories yet, post it by hand"
       : p.fallbackAfterMinutes == null
         ? "manual: post it by hand with the link sticker"
-        : `manual: post it by hand until ${fallbackTime(time, p.fallbackAfterMinutes)}, weekpost does not post it for you yet`;
+        : `manual: ${manualStoryNote(time, p.fallbackAfterMinutes)}`;
   return ` <span class="badge">${esc(text)}</span>`;
 }
 

@@ -1,7 +1,7 @@
 // Plan for `weekpost package`: a folder per day and account, a subfolder per post, with the media exactly as
 // published plus the caption, the schedule and the link, for publishing by hand.
 import type { Manifest } from "../render/manifest.ts";
-import { fallbackTime } from "../content/storyMode.ts";
+import { manualStoryNote } from "../content/storyMode.ts";
 import type { Post } from "../content/post.ts";
 
 export type PackageItem = { dir: string; files: { from: string; to: string }[]; texts: Record<string, string> };
@@ -14,7 +14,7 @@ function storyLine(post: Manifest["posts"][number], time: string): string {
   if (post.type !== "story") return "";
   if (post.storyMode === "auto") return "publishing: weekpost does not post Stories yet; post it by hand\n";
   if (post.fallbackAfterMinutes == null) return "publishing: post it by hand with the link sticker\n";
-  return `publishing: post it by hand with the link sticker until ${fallbackTime(time, post.fallbackAfterMinutes)}; weekpost does not post it for you yet (the fallback is recorded only)\n`;
+  return `publishing: ${manualStoryNote(time, post.fallbackAfterMinutes)}\n`;
 }
 
 // Posts with an error in the manifest, or missing from it, are skipped.

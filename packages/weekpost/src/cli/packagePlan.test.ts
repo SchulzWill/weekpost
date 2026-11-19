@@ -41,7 +41,7 @@ describe("packagePlan: Story", () => {
   it("copies the manual art, not the published one, and records the fallback time", () => {
     const item = plan({ storyMode: "manual", fallbackAfterMinutes: 120 }, { publish: [art[0]], manual: art[1] });
     expect(item.files).toEqual([{ from: art[1], to: "story-manual.jpg" }]);
-    expect(item.texts["time.txt"]).toContain("publishing: post it by hand with the link sticker until 13:00; weekpost does not post it for you yet (the fallback is recorded only)\n");
+    expect(item.texts["time.txt"]).toContain("publishing: post it by hand with the link sticker; weekpost does not post it for you yet (fallback time 13:00 is recorded only)\n");
   });
 
   it("asks for the sticker with no deadline when there is no fallback", () => {

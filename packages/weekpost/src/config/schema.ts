@@ -122,7 +122,7 @@ export const configSchema = z.strictObject({
   // Optional; `metrics.extra` is off unless set.
   metrics: metrics.optional(),
   // stories.publish: how a Story is published when the post has no `story.publish` ("manual" by default, so a project without this block keeps working as before).
-  // stories.fallbackAfterMinutes: minutes after the Story's time at which a manual Story is published automatically if nobody did it; null = never.
+  // stories.fallbackAfterMinutes: minutes after the Story's time recorded as the fallback time of a manual Story (nothing publishes at it yet); null = none.
   stories: z
     .strictObject({
       publish: z.enum(["auto", "manual"], { error: 'stories.publish: use "auto" or "manual"' }).default("manual"),
@@ -130,7 +130,7 @@ export const configSchema = z.strictObject({
         .number({ error: "stories.fallbackAfterMinutes: use a whole number of minutes from 15 to 1380, or null for no fallback" })
         .int("stories.fallbackAfterMinutes: use a whole number of minutes from 15 to 1380, or null for no fallback")
         .min(15, "stories.fallbackAfterMinutes: use at least 15 minutes, or null for no fallback")
-        .max(1380, "stories.fallbackAfterMinutes: use at most 1380 minutes (23 h), so the fallback runs within a day of the post")
+        .max(1380, "stories.fallbackAfterMinutes: use at most 1380 minutes (23 h), so the fallback time stays within a day of the post")
         .nullable()
         .default(null),
     })
