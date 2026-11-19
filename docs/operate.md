@@ -33,6 +33,9 @@ npx weekpost reschedule <post-id> --account=en --at="2026-11-09 18:30"   # local
 npx weekpost reschedule <post-id> --account=en --at="2026-11-09 18:30" --rearm   # a failed post: try again
 npx weekpost resolve <post-id> --account=en --published=<permalink>      # stuck in publishing: it did go out
 npx weekpost resolve <post-id> --account=en --not-published              # stuck in publishing: it did not
+npx weekpost resolve <post-id> --account=en --published                  # manual Story: you posted it by hand (a link is optional)
+npx weekpost resolve <post-id> --account=en --not-published              # manual Story: cancel it, it will not be posted
+npx weekpost resolve <post-id> --account=en --fallback-now               # manual Story: post it now without the link sticker
 npx weekpost package 2026-W45            # caption, time and media per post, for posting by hand (Stories)
 npx weekpost metrics                     # read Instagram Insights and print the weekly report (writes nothing)
 ```
@@ -78,7 +81,7 @@ export default defineConfig({
 
 `first-post` checks that your Worker really publishes. After `token`, run `npx weekpost first-post en --caption="Hello"` in a terminal (`--yes` skips the confirmation but never the terminal): it confirms the account handle, renders a plain card with your brand name (no paid API), queues it for about a minute ahead and watches the queue for up to 15 minutes (`--timeout=<minutes>`; the Worker's cron runs every 5 minutes), then prints the permalink. **The post is public on the real account**, so the caption is yours and required (without `--caption` it asks). If it fails, it translates the Worker's error and points to the step in [docs/setup.md](setup.md) to fix. Repeating the command the same day never queues a second post: it finds the existing row and keeps watching it. Delete the post on Instagram when you are done; weekpost does not delete media.
 
-`cancel` works on posts that have not gone out, and `restore` undoes it (it refuses a publish time already past unless you add `--allow-past`, because the post would go out at once). `reschedule` only moves scheduled posts (or failed ones with `--rearm`), and the new time wins over later merges until the YAML changes again. `resolve` only works on a post stuck in `publishing` for more than 30 minutes. Failed posts are retried up to 3 times, waiting 5 and then 10 minutes, before they stay `failed`.
+`cancel` works on posts that have not gone out, and `restore` undoes it (it refuses a publish time already past unless you add `--allow-past`, because the post would go out at once). `reschedule` only moves scheduled posts (or failed ones with `--rearm`), and the new time wins over later merges until the YAML changes again. `resolve` works on a post stuck in `publishing` for more than 30 minutes (its link is required for `--published`), and on a manual Story, with no wait: `--published` records that you posted it, `--not-published` cancels it, and `--fallback-now` posts it without the link sticker at the next publisher run (not while the fallback is already retrying). `status` shows a Story's mode and its fallback time. Failed posts are retried up to 3 times, waiting 5 and then 10 minutes, before they stay `failed`.
 
 ### Topic sources
 
