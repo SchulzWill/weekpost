@@ -7,6 +7,7 @@ import { readLocalEnv, writeLocalEnv } from "../cli/secrets.ts";
 import { ApplyError, type Action, type Actions, type ApplyIO } from "./apply.ts";
 import { WRANGLER_PKG, type RunResult } from "./runner.ts";
 import { ISSUE_LABEL } from "../metrics/report.ts";
+import { STORY_LABEL } from "../metrics/github.ts";
 import { LOCK_FILE } from "./template.ts";
 import { ACTIONS_SECRET, ENVIRONMENT, WORKER_SECRETS } from "./steps.ts";
 
@@ -69,6 +70,9 @@ const githubLabel: Action = async (io) => {
   // The weekly issue needs this label.
   await must(io, "gh label create", "gh", ["label", "create", ISSUE_LABEL, "--force", "--description", "Weekly Instagram metrics report"], { cwd: io.context().projectRoot });
   io.out.log(`  label "${ISSUE_LABEL}" ready`);
+  // The hourly Story reminders need this one.
+  await must(io, "gh label create", "gh", ["label", "create", STORY_LABEL, "--force", "--description", "Reminder to post a Story by hand"], { cwd: io.context().projectRoot });
+  io.out.log(`  label "${STORY_LABEL}" ready`);
 };
 
 const githubSecrets: Action = async (io) => {

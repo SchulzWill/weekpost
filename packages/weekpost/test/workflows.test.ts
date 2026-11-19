@@ -20,8 +20,8 @@ const steps = (w: Workflow) => Object.entries(w.jobs).flatMap(([job, j]) => j.st
 const secretsIn = (s: Step): string[] => JSON.stringify({ env: s.env, with: s.with }).match(/secrets\.[A-Z_]+/g) ?? [];
 
 describe("workflow templates", () => {
-  it("ships the four workflows and the dependabot config", () => {
-    expect(files).toEqual(["weekpost-check.yml", "weekpost-enqueue.yml", "weekpost-metrics.yml", "weekpost-preview.yml"]);
+  it("ships the five workflows and the dependabot config", () => {
+    expect(files).toEqual(["weekpost-check.yml", "weekpost-enqueue.yml", "weekpost-metrics.yml", "weekpost-preview.yml", "weekpost-stories.yml"]);
     expect(parse(readFileSync(join(dir, "dependabot.yml"), "utf8")).updates[0]["package-ecosystem"]).toBe("github-actions");
   });
 
@@ -42,10 +42,10 @@ describe("workflow templates", () => {
     for (const [name, job] of Object.entries(w.jobs)) expect(job.permissions, `${f}:${name}`).toBeTruthy();
   });
 
-  it.each(files)("%s grants no write permission beyond pull-requests (issues for the metrics)", (f) => {
+  it.each(files)("%s grants no write permission beyond pull-requests (issues for the metrics and the Story reminders)", (f) => {
     for (const job of Object.values(load(f).jobs)) {
       for (const [scope, level] of Object.entries(job.permissions!)) {
-        if (level === "write") expect(scope).toBe(f === "weekpost-metrics.yml" ? "issues" : "pull-requests");
+        if (level === "write") expect(scope).toBe(f === "weekpost-metrics.yml" || f === "weekpost-stories.yml" ? "issues" : "pull-requests");
       }
     }
   });
@@ -71,7 +71,7 @@ describe("workflow templates", () => {
     for (const f of files) {
       for (const s of steps(load(f))) {
         const has = secretsIn(s).some((x) => x.startsWith("secrets.WEEKPOST_SUPABASE_"));
-        const writers = [["weekpost-enqueue.yml", "upload the media and schedule"], ["weekpost-metrics.yml", "collect, store and report the metrics"]];
+        const writers = [["weekpost-enqueue.yml", "upload the media and schedule"], ["weekpost-metrics.yml", "collect, store and report the metrics"], ["weekpost-stories.yml", "remind the Stories to post by hand"]];
         expect(has, `${f}: ${s.name}`).toBe(writers.some(([wf, name]) => f === wf && s.name === name));
       }
     }
@@ -146,6 +146,29 @@ describe("workflow templates", () => {
     expect(checkout.with?.["persist-credentials"]).toBe(false);
   });
 
+  it("the stories workflow runs hourly and by hand, from main, in the weekpost environment, with minimal permissions and no cancel", () => {
+    const w = load("weekpost-stories.yml") as Workflow & { concurrency?: { group: string; "cancel-in-progress": boolean } };
+    expect(Object.keys(w.on).sort()).toEqual(["schedule", "workflow_dispatch"]);
+    const cron = (w.on.schedule as { cron: string }[]).map((c) => c.cron);
+    expect(cron).toHaveLength(1);
+    expect(cron[0]).toMatch(/^\d+ \* \* \* \*$/); // a fixed minute of every hour
+    expect(w.concurrency).toEqual({ group: "weekpost-stories", "cancel-in-progress": false });
+    const job = w.jobs.stories;
+    expect(job.if).toBe("github.ref == 'refs/heads/main'");
+    expect(job.environment).toBe("weekpost");
+    expect(job.permissions).toEqual({ contents: "read", issues: "write" });
+    expect(job.steps.find((s) => s.uses?.startsWith("actions/checkout"))!.with?.["persist-credentials"]).toBe(false);
+  });
+
+  it("the stories step runs `stories --remind --issue`, with only the secrets of the metrics workflow, and only in that step", () => {
+    const all = steps(load("weekpost-stories.yml"));
+    const step = all.find((s) => s.name === "remind the Stories to post by hand")!;
+    expect(step.run).toContain("weekpost stories --remind --issue");
+    expect(step.env).toMatchObject({ WEEKPOST_SUPABASE_URL: "${{ secrets.WEEKPOST_SUPABASE_URL }}", WEEKPOST_SUPABASE_KEY: "${{ secrets.WEEKPOST_SUPABASE_KEY }}", GITHUB_TOKEN: "${{ github.token }}", GITHUB_REPOSITORY: "${{ github.repository }}" });
+    expect(new Set(secretsIn(step))).toEqual(new Set(["secrets.WEEKPOST_SUPABASE_URL", "secrets.WEEKPOST_SUPABASE_KEY"]));
+    for (const s of all) if (s !== step) expect(secretsIn(s), s.name ?? s.uses).toEqual([]);
+  });
+
   it("the metrics step runs `metrics --write --issue` with the database secrets and the GitHub token", () => {
     const step = steps(load("weekpost-metrics.yml")).find((s) => s.name === "collect, store and report the metrics")!;
     expect(step.run).toContain("weekpost metrics --write --issue");
@@ -176,7 +199,7 @@ describe("workflow templates", () => {
   it("no job that checks out code has write permissions", () => {
     for (const f of files) {
       for (const [name, job] of Object.entries(load(f).jobs)) {
-        if (job.steps.some((s) => s.uses?.startsWith("actions/checkout")) && f !== "weekpost-enqueue.yml" && f !== "weekpost-metrics.yml") {
+        if (job.steps.some((s) => s.uses?.startsWith("actions/checkout")) && f !== "weekpost-enqueue.yml" && f !== "weekpost-metrics.yml" && f !== "weekpost-stories.yml") {
           expect(Object.values(job.permissions!), `${f}:${name}`).not.toContain("write");
         }
       }

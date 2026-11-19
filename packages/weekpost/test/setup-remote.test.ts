@@ -82,12 +82,13 @@ describe("worker", () => {
 });
 
 describe("github", () => {
-  it("creates (or updates, so a re-run on existing labels succeeds) the label named in the config and the label of the metrics issue", async () => {
+  it("creates (or updates, so a re-run on existing labels succeeds) the label named in the config, the label of the metrics issue and the label of the Story reminders", async () => {
     const h = harness();
     await act("github.label")(h.io, step);
-    expect(h.calls).toHaveLength(2);
+    expect(h.calls).toHaveLength(3);
     expect(argv(h.calls[0]!)).toBe("gh label create media-ok --force --description Generate the media preview for this pull request");
     expect(argv(h.calls[1]!)).toBe("gh label create metrics --force --description Weekly Instagram metrics report");
+    expect(argv(h.calls[2]!)).toBe("gh label create story --force --description Reminder to post a Story by hand");
   });
 
   it("sets the Actions secret from stdin", async () => {

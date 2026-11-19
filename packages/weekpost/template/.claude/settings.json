@@ -12,6 +12,7 @@
       "Bash(*weekpost* resolve *--yes*)",
       "Bash(*weekpost* metrics *--write*)",
       "Bash(*weekpost* metrics *--issue*)",
+      "Bash(*weekpost* stories *--issue*)",
       "Bash(script *)",
       "Bash(expect *)",
       "Bash(unbuffer *)",

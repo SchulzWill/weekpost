@@ -46,9 +46,11 @@ describe("weekpost init", () => {
     const c = cap();
     expect(await runInit([dir, `--answers=${answersFile(ANSWERS)}`], c.out)).toBe(0);
     for (const f of templateFiles()) expect(existsSync(join(dir, f)), f).toBe(true);
-    for (const f of ["weekpost.config.ts", ".github/workflows/weekpost-preview.yml", ".github/workflows/weekpost-metrics.yml", ".github/dependabot.yml", "worker/index.ts", "worker/wrangler.toml", "content/.gitkeep", "assets/README.md"]) {
+    for (const f of ["weekpost.config.ts", ".github/workflows/weekpost-preview.yml", ".github/workflows/weekpost-metrics.yml", ".github/workflows/weekpost-stories.yml", ".github/dependabot.yml", "worker/index.ts", "worker/wrangler.toml", "content/.gitkeep", "assets/README.md"]) {
       expect(existsSync(join(dir, f)), f).toBe(true);
     }
+    const lock = JSON.parse(readFileSync(join(dir, "weekpost.lock.json"), "utf8")) as { files: Record<string, string> };
+    expect(Object.keys(lock.files)).toContain(".github/workflows/weekpost-stories.yml");
     addAssets(dir);
     const { config } = await loadConfig(dir);
     expect(config.brand.name).toBe("Shop & Co");
