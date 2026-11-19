@@ -106,7 +106,7 @@ export interface OperatorDb {
    * Without `mode` it never writes the status or the mode, so a `failed` row stays failed.
    */
   updateContent(
-    k: Key, c: Pick<NewRow, "caption" | "publishAt" | "media" | "cover" | "link" | "contentHash" | "mediaHash" | "status" | "fallbackAt"> & Partial<SourceStamp>,
+    k: Key, c: Pick<NewRow, "caption" | "publishAt" | "media" | "cover" | "link" | "contentHash" | "mediaHash" | "status"> & Partial<SourceStamp>,
     opts?: { revive?: boolean; mode?: ModeSwitch },
   ): Promise<void>;
   /** Returns the previous status. Refuses `publishing` and `published`. `stamp` records the commit that canceled it. */

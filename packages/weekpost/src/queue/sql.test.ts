@@ -824,6 +824,18 @@ describe("0007_stories.sql", () => {
     await expect(c.query("select public.weekpost_story_fallback_now($1,'en')", [STORY])).rejects.toThrow(/not manual/);
   });
 
+  it("an upsert that does not name fallback_at keeps the deadline set by weekpost_story_fallback_now", async () => {
+    const c = await freshDb();
+    await insertPost(c, STORY, { type: "story", media: JSON.stringify(["s.jpg"]) });
+    await c.query("update public.weekpost_posts set status = 'manual'");
+    await c.query("select public.weekpost_story_fallback_now($1,'en')", [STORY]);
+    await c.query(
+      "insert into public.weekpost_posts (post_id, account, type, week, publish_at, caption, media, status, publish_mode) values ($1,'en','story','2026-W44','2020-01-01T00:00:00Z','edited',$2,'manual','manual') on conflict (post_id, account) do update set caption = excluded.caption, status = excluded.status, publish_mode = excluded.publish_mode",
+      [STORY, JSON.stringify(["s.jpg"])],
+    );
+    expect((await c.query("select fallback_at is not null as kept, caption from public.weekpost_posts")).rows[0]).toEqual({ kept: true, caption: "edited" });
+  });
+
   it("a manual Story that went back to scheduled keeps its mode and fallback_at (mark_failed, release, resolve false)", async () => {
     for (const back of [
       (c: Client) => c.query("select public.weekpost_mark_failed($1,'en','boom','1 minute')", [STORY]),

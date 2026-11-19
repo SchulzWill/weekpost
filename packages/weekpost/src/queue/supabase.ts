@@ -121,9 +121,8 @@ function toRow(r: Raw): QueueRow {
 
 const stampColumns = (c: Partial<SourceStamp>) => ({ source_commit: c.sourceCommit ?? null, source_committed_at: c.sourceCommittedAt ?? null });
 
-const contentColumns = (c: Pick<NewRow, "caption" | "publishAt" | "media" | "cover" | "link" | "contentHash" | "mediaHash"> & Partial<SourceStamp> & { fallbackAt?: string | null }) => ({
+const contentColumns = (c: Pick<NewRow, "caption" | "publishAt" | "media" | "cover" | "link" | "contentHash" | "mediaHash"> & Partial<SourceStamp>) => ({
   publish_at: c.publishAt, caption: c.caption, media: c.media, cover: c.cover, link: c.link, content_hash: c.contentHash, media_hash: c.mediaHash,
-  fallback_at: c.fallbackAt ?? null,
   ...stampColumns(c),
 });
 
@@ -245,8 +244,10 @@ export function supabaseDb(url: string, key: string, fetchFn: Fetch = fetch): Db
     },
     async insert(rows) {
       if (!rows.length) return;
-      // PostgREST needs the same keys in every object of the array, so `status`, `publish_mode` and `fallback_at` are always sent.
-      const body = rows.map((r) => ({ post_id: r.postId, account: r.account, type: r.type, week: r.week, status: r.status ?? "scheduled", publish_mode: r.publishMode ?? null, ...contentColumns(r) }));
+      // PostgREST needs the same keys in every object of the array, so `status` and `publish_mode` are always sent.
+      // `fallback_at` is sent only when every row names it: the upsert would otherwise reset a deadline set by weekpost_story_fallback_now.
+      const withFallback = rows.every((r) => r.fallbackAt !== undefined);
+      const body = rows.map((r) => ({ post_id: r.postId, account: r.account, type: r.type, week: r.week, status: r.status ?? "scheduled", publish_mode: r.publishMode ?? null, ...(withFallback ? { fallback_at: r.fallbackAt } : {}), ...contentColumns(r) }));
       // Upsert by the key: a post that moved to another week keeps its (post_id, account) and would answer 409 otherwise.
       // The SQL trigger refuses to rewrite a row that is publishing or published, and to change its status (migration 0003),
       // so an upsert that races a publisher fails instead of reopening the post.
@@ -265,12 +266,12 @@ export function supabaseDb(url: string, key: string, fetchFn: Fetch = fetch): Db
       if (opts?.mode) {
         // The Story's mode changed: status, mode and fallback move together, only while the row has the status the caller read.
         const m = opts.mode;
-        const set = { ...contentColumns({ ...c, fallbackAt: m.fallbackAt }), status: c.status ?? m.from, publish_mode: m.publishMode };
+        const set = { ...contentColumns(c), status: m.publishMode === "manual" ? "manual" : "scheduled", publish_mode: m.publishMode, fallback_at: m.fallbackAt };
         const switched = await patch(`${keyQuery(k)}&status=eq.${encodeURIComponent(m.from)}`, set);
         if (!switched.length) throw new Error(`cannot switch the publish mode of ${label(k)}: it changed since it was read (it was ${m.from})`);
         return;
       }
-      // Only while the row is still editable; never sends `status` or `publish_mode`: a `failed` row stays failed and a
+      // Only while the row is still editable; never sends `status`, `publish_mode` or `fallback_at`: a `failed` row stays failed and a
       // manual row keeps its mode. The SQL trigger refuses the rest as well.
       const changed = await patch(`${keyQuery(k)}&status=in.(scheduled,manual,failed)`, contentColumns(c));
       if (!changed.length) throw new Error(`cannot update ${label(k)}: it is publishing, published or canceled`);

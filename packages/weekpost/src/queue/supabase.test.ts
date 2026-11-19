@@ -199,7 +199,7 @@ describe("OperatorDb", () => {
     await db.insert([]);
     expect(calls).toHaveLength(0);
     await db.insert([{ postId: K.postId, account: "en", type: "carousel", week: "2026-W44", publishAt: "2026-10-26T12:00:00Z", caption: "hi", media: ["a.jpg", "b.jpg"], cover: null, link: null, contentHash: "h", mediaHash: "m" }]);
-    expect(body(calls[0]!)).toEqual([{ post_id: K.postId, account: "en", type: "carousel", week: "2026-W44", status: "scheduled", publish_at: "2026-10-26T12:00:00Z", caption: "hi", media: ["a.jpg", "b.jpg"], cover: null, link: null, content_hash: "h", media_hash: "m", fallback_at: null, publish_mode: null, source_commit: null, source_committed_at: null }]);
+    expect(body(calls[0]!)).toEqual([{ post_id: K.postId, account: "en", type: "carousel", week: "2026-W44", status: "scheduled", publish_at: "2026-10-26T12:00:00Z", caption: "hi", media: ["a.jpg", "b.jpg"], cover: null, link: null, content_hash: "h", media_hash: "m", publish_mode: null, source_commit: null, source_committed_at: null }]);
   });
 
   it("insert is an upsert by the key, so a post that moved to another week does not answer 409", async () => {
@@ -447,8 +447,18 @@ describe("story publish modes (migration 0007)", () => {
     ]);
     const rows = body(calls[0]!) as Record<string, unknown>[];
     expect(Object.keys(rows[0]!).sort()).toEqual(Object.keys(rows[1]!).sort());
-    expect(rows[0]).toMatchObject({ publish_mode: null, fallback_at: null });
-    expect(rows[1]).toMatchObject({ status: "manual", publish_mode: "manual", fallback_at: "2026-10-26T12:30:00Z" });
+    expect(rows[0]).toMatchObject({ publish_mode: null });
+    expect(rows[1]).toMatchObject({ status: "manual", publish_mode: "manual" });
+  });
+
+  it("insert leaves fallback_at out unless every row names it, so an upsert keeps a deadline set by the fallback function", async () => {
+    const base = { account: "en", week: "2026-W44", publishAt: "2026-10-26T12:00:00Z", caption: "hi", media: ["a.jpg"], cover: null, link: null, contentHash: "h", mediaHash: "m", type: "story" as const };
+    const none = seq(null);
+    await none.db.insert([{ ...base, postId: "2026-10-26-s1" }, { ...base, postId: "2026-10-26-s2", fallbackAt: "2026-10-26T12:30:00Z" }]);
+    expect((body(none.calls[0]!) as Record<string, unknown>[]).every((r) => !("fallback_at" in r))).toBe(true);
+    const all = seq(null);
+    await all.db.insert([{ ...base, postId: "2026-10-26-s1", fallbackAt: null }, { ...base, postId: "2026-10-26-s2", fallbackAt: "2026-10-26T12:30:00Z" }]);
+    expect((body(all.calls[0]!) as Record<string, unknown>[]).map((r) => r.fallback_at)).toEqual([null, "2026-10-26T12:30:00Z"]);
   });
 
   it("maps publish_mode and fallback_at, and leaves them absent on a database before 0007", async () => {
@@ -462,12 +472,12 @@ describe("story publish modes (migration 0007)", () => {
   it("a content edit never sends status or publish_mode, on a failed row or a scheduled manual one", async () => {
     for (const row of [raw({ status: "failed" }), raw({ status: "scheduled", publish_mode: "manual" })]) {
       const { db, calls } = seq([row]);
-      await db.updateContent(K, { ...c, fallbackAt: "2026-10-26T12:30:00Z" });
+      await db.updateContent(K, c);
       expect(calls[0]!.url).toContain("status=in.(scheduled,manual,failed)");
       const b = body(calls[0]!);
       expect(b).not.toHaveProperty("status");
       expect(b).not.toHaveProperty("publish_mode");
-      expect(b.fallback_at).toBe("2026-10-26T12:30:00Z");
+      expect(b).not.toHaveProperty("fallback_at");
     }
   });
 
@@ -483,6 +493,15 @@ describe("story publish modes (migration 0007)", () => {
     await fromScheduled.db.updateContent(K, { ...c, status: "manual" }, { mode: { from: "scheduled", publishMode: "manual", fallbackAt: "2026-10-26T12:30:00Z" } });
     expect(fromScheduled.calls[0]!.url).toContain("status=eq.scheduled");
     expect(body(fromScheduled.calls[0]!)).toMatchObject({ status: "manual", publish_mode: "manual", fallback_at: "2026-10-26T12:30:00Z" });
+  });
+
+  it("a mode switch derives the status from the target mode, whatever status the plan row carries", async () => {
+    const { db, calls } = seq([raw({ status: "scheduled" })]);
+    await db.updateContent(K, { ...c, status: "manual" }, { mode: { from: "manual", publishMode: "auto", fallbackAt: null } });
+    expect(body(calls[0]!)).toMatchObject({ status: "scheduled", publish_mode: "auto", fallback_at: null });
+    const back = seq([raw({ status: "manual" })]);
+    await back.db.updateContent(K, { ...c, status: "scheduled" }, { mode: { from: "scheduled", publishMode: "manual", fallbackAt: null } });
+    expect(body(back.calls[0]!)).toMatchObject({ status: "manual", publish_mode: "manual" });
   });
 
   it("a mode switch that matches no row says the row changed since it was read", async () => {
