@@ -42,7 +42,7 @@ npx weekpost metrics                     # read Instagram Insights and print the
 `metrics` reads Instagram Insights and prints a weekly report:
 
 - **What it reads:** the posts of the last 14 days, and for each account the totals of the last 7 days plus the follower count.
-- **What it prints:** per account, the posts and some extra numbers, then an Attention list (failed or stuck posts, a stopped queue, tokens close to expiry, a token without the Insights permission, Stories to post by hand, missing data). Each line comes with the command that fixes it.
+- **What it prints:** per account, the posts and some extra numbers, then an Attention list (failed or stuck posts, a stopped queue, tokens close to expiry, a token without the Insights permission, Stories to post by hand this week, Stories past their time that nobody resolved, missing data). Each line comes with the command that fixes it; for a Story that is `weekpost resolve <post-id> --account=<a> --published[=<link>]` once you posted it, or `--not-published` if it will not be posted.
 - `--json` prints the data instead of the text.
 - `--write` stores the numbers in `weekpost_metrics`.
 - `--issue` creates or rewrites one GitHub issue per week, titled `weekpost metrics: <YYYY-Www>` (label `metrics`). It needs the repository and a token that may write issues: from `GITHUB_REPOSITORY` and `GITHUB_TOKEN`, or `--repo=<owner/name>`. To run it yourself: `GITHUB_TOKEN=$(gh auth token) npx weekpost metrics --issue --repo=<owner/name>`.
