@@ -6,6 +6,7 @@ export type Fetch = typeof fetch;
 export type Key = { postId: string; account: string };
 export type Status = "scheduled" | "publishing" | "published" | "failed" | "manual" | "canceled";
 export type CanceledBy = "enqueue" | "operator";
+export type PublishMode = "auto" | "manual";
 export type PostType = "carousel" | "reel" | "story";
 
 export interface QueueRow {
@@ -40,6 +41,10 @@ export interface QueueRow {
   sourceCommittedAt?: string | null;
   /** Who canceled a `canceled` row. Null (or absent) counts as the operator: rows canceled before migration 0003. */
   canceledBy?: CanceledBy | null;
+  /** Who publishes the post: the Worker (`auto`) or the operator by hand (`manual`). Absent on a database before migration 0007. */
+  publishMode?: PublishMode;
+  /** For a manual Story: the instant after which the Worker may publish it without the link sticker. Absent before migration 0007. */
+  fallbackAt?: string | null;
 }
 
 /** Which commit wrote a row; set by the enqueue so a stale run can tell what is newer than itself. */
@@ -51,6 +56,9 @@ export type NewRow = Pick<
 > & Partial<SourceStamp> & {
   /** Stories are published by hand, so they enter as `manual`. Default: `scheduled`. */
   status?: "scheduled" | "manual";
+  /** Left out, the database decides: `manual` for a Story, `auto` for the rest. */
+  publishMode?: PublishMode;
+  fallbackAt?: string | null;
 };
 
 /** Which Instagram API a token belongs to (migration 0006): Instagram Login (`graph.instagram.com`) or Unified login (`graph.facebook.com`). */
@@ -84,17 +92,22 @@ export interface PublisherDb {
   stuck(olderThanIso: string): Promise<Key[]>;
 }
 
+/** A change of publish mode: `from` is the status the caller read; the write happens only if the row still has it. */
+export type ModeSwitch = { from: Status; publishMode: PublishMode; fallbackAt: string | null };
+
 export interface OperatorDb {
   rows(filter: { week?: string; status?: Status[]; key?: Key }): Promise<QueueRow[]>;
   insert(rows: NewRow[]): Promise<void>;
   /**
    * Rewrites the content of a row that is still editable (`scheduled`, `manual`, `failed`). With `revive`, it instead
    * brings back a row the enqueue canceled (and only one the enqueue canceled): `c.status` (default `scheduled`), with
-   * the attempts, error and container cleared.
+   * the attempts, error and container cleared. With `mode` (the Story's publish mode changed), it also writes `c.status`,
+   * the mode and the fallback instant, but only while the row still has the status the caller read (`mode.from`).
+   * Without `mode` it never writes the status or the mode, so a `failed` row stays failed.
    */
   updateContent(
     k: Key, c: Pick<NewRow, "caption" | "publishAt" | "media" | "cover" | "link" | "contentHash" | "mediaHash" | "status"> & Partial<SourceStamp>,
-    opts?: { revive?: boolean },
+    opts?: { revive?: boolean; mode?: ModeSwitch },
   ): Promise<void>;
   /** Returns the previous status. Refuses `publishing` and `published`. `stamp` records the commit that canceled it. */
   cancel(k: Key, by: CanceledBy, stamp?: SourceStamp): Promise<Status>;
@@ -104,6 +117,10 @@ export interface OperatorDb {
   reschedule(k: Key, publishAt: string, opts: { rearm: boolean }): Promise<void>;
   /** Only `publishing`. */
   resolveStuck(k: Key, outcome: { published: true; permalink: string } | { published: false }): Promise<void>;
+  /** A manual Story (`manual`, or `scheduled` while its fallback is retried): posted by hand (`published`) or given up (canceled). */
+  resolveManual(k: Key, outcome: { published: boolean; permalink?: string | null }): Promise<void>;
+  /** A `manual` Story whose fallback should run now: sets `fallbackAt` to the database clock. */
+  storyFallbackNow(k: Key): Promise<void>;
   /** Insert or replace the token of an account (`weekpost token`). */
   upsertToken(t: { account: string; igUserId: string; accessToken: string; expiresAt: string | null; login?: LoginMode }): Promise<void>;
 }
@@ -133,6 +150,10 @@ export interface MetricsDb extends Pick<PublisherDb, "tokens" | "stuck"> {
   overdue(beforeIso: string): Promise<QueueRow[]>;
   /** `manual` rows (Stories to post by hand) whose time is at or after `sinceIso` and before `untilIso`. */
   manualDue(sinceIso: string, untilIso: string): Promise<QueueRow[]>;
+  /** `manual` rows whose publish time is before the instant: Stories nobody posted yet. */
+  manualOverdue(nowIso: string): Promise<QueueRow[]>;
+  /** Published rows with `publish_mode = 'manual'` and a media id, published at or after the instant: Stories the fallback sent. */
+  storyFallbacks(sinceIso: string): Promise<QueueRow[]>;
 }
 
 export type Db = PublisherDb & OperatorDb;

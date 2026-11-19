@@ -83,7 +83,7 @@ describe("metrics report with the hook", () => {
 describe("weekpost metrics with the hook", () => {
   const db = {
     tokens: async () => [], stuck: async () => [], publishedSince: async () => [], metricsSince: async () => [],
-    upsertMetrics: async () => {}, failed: async () => [], overdue: async () => [], manualDue: async () => [],
+    upsertMetrics: async () => {}, failed: async () => [], overdue: async () => [], manualDue: async () => [], manualOverdue: async () => [], storyFallbacks: async () => [],
   };
   const exec = async (config: object | undefined, env: Record<string, string> = {}) => {
     const logs: string[] = [];

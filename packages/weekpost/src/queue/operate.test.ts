@@ -26,6 +26,8 @@ function fake(rows: QueueRow[]) {
     restore: async (k: Key) => { calls.push(`restore ${k.postId}/${k.account}`); },
     reschedule: async (k, at, o) => { calls.push(`reschedule ${k.postId}/${k.account} ${at} rearm=${o.rearm}`); },
     resolveStuck: async (k, o) => { calls.push(`resolve ${k.postId}/${k.account} ${JSON.stringify(o)}`); },
+    resolveManual: async () => {},
+    storyFallbackNow: async () => {},
     upsertToken: async () => {},
   };
   return { db, calls };

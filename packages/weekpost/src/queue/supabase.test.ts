@@ -199,7 +199,7 @@ describe("OperatorDb", () => {
     await db.insert([]);
     expect(calls).toHaveLength(0);
     await db.insert([{ postId: K.postId, account: "en", type: "carousel", week: "2026-W44", publishAt: "2026-10-26T12:00:00Z", caption: "hi", media: ["a.jpg", "b.jpg"], cover: null, link: null, contentHash: "h", mediaHash: "m" }]);
-    expect(body(calls[0]!)).toEqual([{ post_id: K.postId, account: "en", type: "carousel", week: "2026-W44", status: "scheduled", publish_at: "2026-10-26T12:00:00Z", caption: "hi", media: ["a.jpg", "b.jpg"], cover: null, link: null, content_hash: "h", media_hash: "m", source_commit: null, source_committed_at: null }]);
+    expect(body(calls[0]!)).toEqual([{ post_id: K.postId, account: "en", type: "carousel", week: "2026-W44", status: "scheduled", publish_at: "2026-10-26T12:00:00Z", caption: "hi", media: ["a.jpg", "b.jpg"], cover: null, link: null, content_hash: "h", media_hash: "m", publish_mode: null, source_commit: null, source_committed_at: null }]);
   });
 
   it("insert is an upsert by the key, so a post that moved to another week does not answer 409", async () => {
@@ -427,5 +427,108 @@ describe("isBucketPath", () => {
   it("accepts generator paths and rejects traversal and URLs", () => {
     expect(isBucketPath("2026-W42/p/en/slide-01.jpg")).toBe(true);
     for (const bad of ["../x", "a/../b", "/abs", "a//b", "a b", "https://x/y", ""]) expect(isBucketPath(bad)).toBe(false);
+  });
+});
+
+describe("story publish modes (migration 0007)", () => {
+  const c = { caption: "x", publishAt: "t", media: ["a.jpg"], cover: null, link: null, contentHash: "h", mediaHash: "m" };
+  function seq(...responses: unknown[]) {
+    const queue = [...responses];
+    const m = mock(() => queue.shift() ?? []);
+    return { ...m, db: supabaseDb("https://x.supabase.co", SECRET, m.fetchFn) };
+  }
+
+  it("insert always sends publish_mode and fallback_at, so every object of a bulk insert has the same keys", async () => {
+    const { db, calls } = seq(null);
+    const base = { postId: K.postId, account: "en", week: "2026-W44", publishAt: "2026-10-26T12:00:00Z", caption: "hi", media: ["a.jpg"], cover: null, link: null, contentHash: "h", mediaHash: "m" };
+    await db.insert([
+      { ...base, type: "carousel" },
+      { ...base, postId: "2026-10-26-s", type: "story", status: "manual", publishMode: "manual", fallbackAt: "2026-10-26T12:30:00Z" },
+    ]);
+    const rows = body(calls[0]!) as Record<string, unknown>[];
+    expect(Object.keys(rows[0]!).sort()).toEqual(Object.keys(rows[1]!).sort());
+    expect(rows[0]).toMatchObject({ publish_mode: null });
+    expect(rows[1]).toMatchObject({ status: "manual", publish_mode: "manual" });
+  });
+
+  it("insert leaves fallback_at out unless every row names it, so an upsert keeps a deadline set by the fallback function", async () => {
+    const base = { account: "en", week: "2026-W44", publishAt: "2026-10-26T12:00:00Z", caption: "hi", media: ["a.jpg"], cover: null, link: null, contentHash: "h", mediaHash: "m", type: "story" as const };
+    const none = seq(null);
+    await none.db.insert([{ ...base, postId: "2026-10-26-s1" }, { ...base, postId: "2026-10-26-s2", fallbackAt: "2026-10-26T12:30:00Z" }]);
+    expect((body(none.calls[0]!) as Record<string, unknown>[]).every((r) => !("fallback_at" in r))).toBe(true);
+    const all = seq(null);
+    await all.db.insert([{ ...base, postId: "2026-10-26-s1", fallbackAt: null }, { ...base, postId: "2026-10-26-s2", fallbackAt: "2026-10-26T12:30:00Z" }]);
+    expect((body(all.calls[0]!) as Record<string, unknown>[]).map((r) => r.fallback_at)).toEqual([null, "2026-10-26T12:30:00Z"]);
+  });
+
+  it("maps publish_mode and fallback_at, and leaves them absent on a database before 0007", async () => {
+    const { db } = seq([raw({ publish_mode: "manual", fallback_at: "2026-10-26T12:30:00Z" }), raw()]);
+    const [a, b] = await db.rows({});
+    expect(a).toMatchObject({ publishMode: "manual", fallbackAt: "2026-10-26T12:30:00Z" });
+    expect(b).not.toHaveProperty("publishMode");
+    expect(b).not.toHaveProperty("fallbackAt");
+  });
+
+  it("a content edit never sends status or publish_mode, on a failed row or a scheduled manual one", async () => {
+    for (const row of [raw({ status: "failed" }), raw({ status: "scheduled", publish_mode: "manual" })]) {
+      const { db, calls } = seq([row]);
+      await db.updateContent(K, c);
+      expect(calls[0]!.url).toContain("status=in.(scheduled,manual,failed)");
+      const b = body(calls[0]!);
+      expect(b).not.toHaveProperty("status");
+      expect(b).not.toHaveProperty("publish_mode");
+      expect(b).not.toHaveProperty("fallback_at");
+    }
+  });
+
+  it("a mode switch sends status, publish_mode and fallback_at in one PATCH guarded by the status that was read", async () => {
+    const fromManual = seq([raw({ status: "scheduled" })]);
+    await fromManual.db.updateContent(K, { ...c, status: "scheduled" }, { mode: { from: "manual", publishMode: "auto", fallbackAt: null } });
+    expect(fromManual.calls).toHaveLength(1);
+    expect(fromManual.calls[0]!.url).toContain("status=eq.manual");
+    expect(fromManual.calls[0]!.url).not.toContain("status=in.");
+    expect(body(fromManual.calls[0]!)).toMatchObject({ status: "scheduled", publish_mode: "auto", fallback_at: null, caption: "x" });
+
+    const fromScheduled = seq([raw({ status: "manual" })]);
+    await fromScheduled.db.updateContent(K, { ...c, status: "manual" }, { mode: { from: "scheduled", publishMode: "manual", fallbackAt: "2026-10-26T12:30:00Z" } });
+    expect(fromScheduled.calls[0]!.url).toContain("status=eq.scheduled");
+    expect(body(fromScheduled.calls[0]!)).toMatchObject({ status: "manual", publish_mode: "manual", fallback_at: "2026-10-26T12:30:00Z" });
+  });
+
+  it("a mode switch derives the status from the target mode, whatever status the plan row carries", async () => {
+    const { db, calls } = seq([raw({ status: "scheduled" })]);
+    await db.updateContent(K, { ...c, status: "manual" }, { mode: { from: "manual", publishMode: "auto", fallbackAt: null } });
+    expect(body(calls[0]!)).toMatchObject({ status: "scheduled", publish_mode: "auto", fallback_at: null });
+    const back = seq([raw({ status: "manual" })]);
+    await back.db.updateContent(K, { ...c, status: "scheduled" }, { mode: { from: "scheduled", publishMode: "manual", fallbackAt: null } });
+    expect(body(back.calls[0]!)).toMatchObject({ status: "manual", publish_mode: "manual" });
+  });
+
+  it("a mode switch that matches no row says the row changed since it was read", async () => {
+    await expect(seq([]).db.updateContent(K, { ...c, status: "scheduled" }, { mode: { from: "manual", publishMode: "auto", fallbackAt: null } }))
+      .rejects.toThrow("changed since it was read");
+  });
+
+  it("resolveManual and storyFallbackNow call their functions and explain a refusal", async () => {
+    const ok = seq(null);
+    await ok.db.resolveManual(K, { published: true, permalink: "https://www.instagram.com/stories/x/1/" });
+    expect(ok.calls[0]!.url).toBe("https://x.supabase.co/rest/v1/rpc/weekpost_resolve_manual");
+    expect(body(ok.calls[0]!)).toEqual({ p_post_id: K.postId, p_account: "en", p_published: true, p_permalink: "https://www.instagram.com/stories/x/1/" });
+    await ok.db.resolveManual(K, { published: false });
+    expect(body(ok.calls[1]!)).toMatchObject({ p_published: false, p_permalink: null });
+    await ok.db.storyFallbackNow(K);
+    expect(ok.calls[2]!.url).toBe("https://x.supabase.co/rest/v1/rpc/weekpost_story_fallback_now");
+    expect(body(ok.calls[2]!)).toEqual({ p_post_id: K.postId, p_account: "en" });
+    const refuse = () => mock(() => new Response(JSON.stringify({ code: "P0002", message: "weekpost_posts 2026-10-26-a/en: not manual" }), { status: 404 }));
+    await expect(supabaseDb("https://x.supabase.co", SECRET, refuse().fetchFn).resolveManual(K, { published: true })).rejects.toThrow("cannot resolve 2026-10-26-a/en: it is not a manual Story");
+    await expect(supabaseDb("https://x.supabase.co", SECRET, refuse().fetchFn).storyFallbackNow(K)).rejects.toThrow("cannot run the fallback of 2026-10-26-a/en");
+  });
+
+  it("manualOverdue and storyFallbacks query the right rows", async () => {
+    const { db, calls } = seq([raw()]);
+    await db.manualOverdue("2026-10-26T13:00:00Z");
+    expect(calls[0]!.url).toContain("status=eq.manual&publish_at=lt.2026-10-26T13%3A00%3A00Z");
+    await db.storyFallbacks("2026-10-01T00:00:00Z");
+    expect(calls[1]!.url).toContain("status=eq.published&publish_mode=eq.manual&media_id=not.is.null&published_at=gte.2026-10-01T00%3A00%3A00Z");
   });
 });

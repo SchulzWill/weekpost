@@ -114,6 +114,8 @@ function toRow(r: Raw): QueueRow {
     sourceCommit: (r.source_commit as string | null) ?? null,
     sourceCommittedAt: (r.source_committed_at as string | null) ?? null,
     canceledBy: (r.canceled_by as QueueRow["canceledBy"]) ?? null,
+    ...(r.publish_mode === "auto" || r.publish_mode === "manual" ? { publishMode: r.publish_mode } : {}),
+    ...("fallback_at" in r ? { fallbackAt: (r.fallback_at as string | null) ?? null } : {}),
   };
 }
 
@@ -225,6 +227,13 @@ export function supabaseDb(url: string, key: string, fetchFn: Fetch = fetch): Db
       const q = `select=*&status=eq.manual&publish_at=gte.${encodeURIComponent(sinceIso)}&publish_at=lt.${encodeURIComponent(untilIso)}&order=publish_at,post_id,account`;
       return ((await req(`/rest/v1/${TABLE}?${q}`)) as Raw[]).map(toRow);
     },
+    async manualOverdue(nowIso) {
+      return ((await req(`/rest/v1/${TABLE}?select=*&status=eq.manual&publish_at=lt.${encodeURIComponent(nowIso)}&order=publish_at,post_id,account`)) as Raw[]).map(toRow);
+    },
+    async storyFallbacks(sinceIso) {
+      const q = `select=*&status=eq.published&publish_mode=eq.manual&media_id=not.is.null&published_at=gte.${encodeURIComponent(sinceIso)}&order=published_at,post_id,account`;
+      return ((await req(`/rest/v1/${TABLE}?${q}`)) as Raw[]).map(toRow);
+    },
 
     async rows(filter) {
       const q = ["select=*", "order=publish_at,post_id,account"];
@@ -235,8 +244,10 @@ export function supabaseDb(url: string, key: string, fetchFn: Fetch = fetch): Db
     },
     async insert(rows) {
       if (!rows.length) return;
-      // PostgREST needs the same keys in every object of the array, so `status` is always sent.
-      const body = rows.map((r) => ({ post_id: r.postId, account: r.account, type: r.type, week: r.week, status: r.status ?? "scheduled", ...contentColumns(r) }));
+      // PostgREST needs the same keys in every object of the array, so `status` and `publish_mode` are always sent.
+      // `fallback_at` is sent only when every row names it: the upsert would otherwise reset a deadline set by weekpost_story_fallback_now.
+      const withFallback = rows.every((r) => r.fallbackAt !== undefined);
+      const body = rows.map((r) => ({ post_id: r.postId, account: r.account, type: r.type, week: r.week, status: r.status ?? "scheduled", publish_mode: r.publishMode ?? null, ...(withFallback ? { fallback_at: r.fallbackAt } : {}), ...contentColumns(r) }));
       // Upsert by the key: a post that moved to another week keeps its (post_id, account) and would answer 409 otherwise.
       // The SQL trigger refuses to rewrite a row that is publishing or published, and to change its status (migration 0003),
       // so an upsert that races a publisher fails instead of reopening the post.
@@ -252,7 +263,16 @@ export function supabaseDb(url: string, key: string, fetchFn: Fetch = fetch): Db
         if (!back.length) throw new Error(`cannot bring back ${label(k)}: it is no longer canceled by the enqueue`);
         return;
       }
-      // Only while the row is still editable; the SQL trigger refuses the rest as well.
+      if (opts?.mode) {
+        // The Story's mode changed: status, mode and fallback move together, only while the row has the status the caller read.
+        const m = opts.mode;
+        const set = { ...contentColumns(c), status: m.publishMode === "manual" ? "manual" : "scheduled", publish_mode: m.publishMode, fallback_at: m.fallbackAt };
+        const switched = await patch(`${keyQuery(k)}&status=eq.${encodeURIComponent(m.from)}`, set);
+        if (!switched.length) throw new Error(`cannot switch the publish mode of ${label(k)}: it changed since it was read (it was ${m.from})`);
+        return;
+      }
+      // Only while the row is still editable; never sends `status`, `publish_mode` or `fallback_at`: a `failed` row stays failed and a
+      // manual row keeps its mode. The SQL trigger refuses the rest as well.
       const changed = await patch(`${keyQuery(k)}&status=in.(scheduled,manual,failed)`, contentColumns(c));
       if (!changed.length) throw new Error(`cannot update ${label(k)}: it is publishing, published or canceled`);
     },
@@ -290,6 +310,24 @@ export function supabaseDb(url: string, key: string, fetchFn: Fetch = fetch): Db
         });
       } catch (e) {
         if (e instanceof SupabaseError && /not in publishing/.test(e.message)) throw new Error(`cannot resolve ${label(k)}: it is not publishing`);
+        throw e;
+      }
+    },
+    async resolveManual(k, outcome) {
+      try {
+        await rpc("weekpost_resolve_manual", {
+          p_post_id: k.postId, p_account: k.account, p_published: outcome.published, p_permalink: outcome.published ? (outcome.permalink ?? null) : null,
+        });
+      } catch (e) {
+        if (e instanceof SupabaseError && /not manual/.test(e.message)) throw new Error(`cannot resolve ${label(k)}: it is not a manual Story waiting to be posted`);
+        throw e;
+      }
+    },
+    async storyFallbackNow(k) {
+      try {
+        await rpc("weekpost_story_fallback_now", { p_post_id: k.postId, p_account: k.account });
+      } catch (e) {
+        if (e instanceof SupabaseError && /not manual/.test(e.message)) throw new Error(`cannot run the fallback of ${label(k)}: it is not a manual Story waiting to be posted`);
         throw e;
       }
     },

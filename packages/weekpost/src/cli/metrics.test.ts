@@ -25,6 +25,8 @@ function fakeDb(over: Partial<MetricsDb> = {}) {
     failed: async () => [],
     overdue: async (b) => { rec("overdue", b); return []; },
     manualDue: async (a, b) => { rec("manualDue", a, b); return []; },
+    manualOverdue: async () => [],
+    storyFallbacks: async () => [],
     ...over,
   };
   return { db, written, asked };
