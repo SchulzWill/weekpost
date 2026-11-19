@@ -12,6 +12,7 @@ How a release is cut: see [Releasing](docs/releasing.md).
 
 ### Improvements
 
+- `weekpost resolve` now closes a manual Story (one weekpost does not post, which you post by hand): `--published` after you post it (link optional), `--not-published` to cancel it.
 - Groundwork for optional automatic Stories: the queue now records whether each post is published automatically or by hand (`publish_mode`: `auto` or `manual`), and for a hand-posted Story, a time after which weekpost may publish it itself (`fallback_at`). Nothing uses this yet: Stories are still never published by weekpost.
 - New [Upgrading](docs/upgrading.md) guide and a README section: the order of the commands, what `upgrade --apply` does to the database, the files and the Worker, `--print`, and the pending-deploy notice.
 - `weekpost doctor` warns when the `gh` login has no `workflow` scope (needed to push `.github/workflows/`, which an upgrade does) and prints `gh auth refresh -s workflow`.

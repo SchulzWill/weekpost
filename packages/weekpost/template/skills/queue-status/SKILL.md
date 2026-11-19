@@ -19,7 +19,11 @@ Read `last_error` and match it with the table "Reading the Worker logs" in `docs
 2. If it really did not go out, the human runs `reschedule <id> --account=<id> --at="YYYY-MM-DD HH:MM" --rearm`.
 3. For Stories, which are posted by hand, `npx weekpost package <week>` prepares the files.
 
-A post stuck in `publishing` for over 30 minutes needs `resolve`. Do not rearm before looking at Instagram, or the post may be duplicated.
+A manual Story is one weekpost does not post: the human posts it by hand with the link sticker. Then the human runs `resolve <id> --account=<id> --published` (the link is optional), or `--not-published` to cancel it.
+
+Careful: on a post stuck in publishing, --not-published does not cancel. It queues the post again.
+
+A post stuck in `publishing` for over 30 minutes needs `resolve` with the post's link. Do not rearm before looking at Instagram, or the post may be duplicated.
 
 ## Cancel, reschedule, restore
 
