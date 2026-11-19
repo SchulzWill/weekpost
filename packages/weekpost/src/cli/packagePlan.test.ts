@@ -38,20 +38,20 @@ describe("packagePlan: Story", () => {
   const plan = (over: Record<string, unknown>, account = {}) =>
     packagePlan({ ...manifest, posts: [entry(story, { en: { ...acct(art), ...account } }, over)] } as unknown as Manifest, [story], accounts)[0];
 
-  it("copies the manual art, not the published one, and says when it goes out without the sticker", () => {
+  it("copies the manual art, not the published one, and records the fallback time", () => {
     const item = plan({ storyMode: "manual", fallbackAfterMinutes: 120 }, { publish: [art[0]], manual: art[1] });
     expect(item.files).toEqual([{ from: art[1], to: "story-manual.jpg" }]);
-    expect(item.texts["time.txt"]).toContain("publishing: post it by hand with the link sticker until 13:00; after that it goes out without the sticker\n");
+    expect(item.texts["time.txt"]).toContain("publishing: post it by hand with the link sticker until 13:00; weekpost does not post it for you yet (the fallback is recorded only)\n");
   });
 
   it("asks for the sticker with no deadline when there is no fallback", () => {
     expect(plan({ storyMode: "manual", fallbackAfterMinutes: null }, { publish: [art[0]], manual: art[1] }).texts["time.txt"]).toContain("publishing: post it by hand with the link sticker\n");
   });
 
-  it("copies the published art of an auto Story and says it goes out on its own", () => {
+  it("copies the published art of an auto Story and says to post it by hand", () => {
     const item = plan({ storyMode: "auto" }, { files: [art[0]], publish: [art[0]], sha256: { [art[0]]: H } });
     expect(item.files).toEqual([{ from: art[0], to: "story.jpg" }]);
-    expect(item.texts["time.txt"]).toContain("it goes out on its own");
+    expect(item.texts["time.txt"]).toContain("weekpost does not post Stories yet; post it by hand");
   });
 });
 

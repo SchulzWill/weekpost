@@ -134,7 +134,7 @@ export async function runGenerate(args: string[], out: Out = console, cwd = proc
       const text = post.story.text[acc] ?? "";
       const link = post.link?.[acc] ?? "";
       if (mode === "auto") {
-        entry.accounts[acc] = { files: [rel(art)], publish: [rel(art)], sha256: pin([rel(art)]), caption: `${text}\n\n[Publishes on its own, without a link sticker.]` };
+        entry.accounts[acc] = { files: [rel(art)], publish: [rel(art)], sha256: pin([rel(art)]), caption: `${text}\n\n[auto Story: weekpost does not post Stories yet; post it by hand.]` };
         continue;
       }
       // The version for posting by hand keeps the strip free for the link sticker.
@@ -143,7 +143,7 @@ export async function runGenerate(args: string[], out: Out = console, cwd = proc
       const note =
         fallback === null
           ? `Post by hand with the link sticker: ${link}`
-          : `Post by hand with the link sticker until ${fallbackTime(post.times[acc] ?? "00:00", fallback)}; after that it goes out without the sticker. Link: ${link}`;
+          : `Post by hand with the link sticker until ${fallbackTime(post.times[acc] ?? "00:00", fallback)}; weekpost does not post it for you yet. Link: ${link}`;
       entry.accounts[acc] = { files: [rel(art), rel(manual)], publish: [rel(art)], manual: rel(manual), sha256: pin([rel(art), rel(manual)]), caption: `${text}\n\n[${note}]` };
     }
   }

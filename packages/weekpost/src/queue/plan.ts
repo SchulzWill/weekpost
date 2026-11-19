@@ -32,7 +32,7 @@ export function mediaHashOf(publishHashes: string[], coverHash: string | null): 
  */
 export const AUTO_STORIES_PUBLISHED = false;
 export const autoStoriesPublished = (): boolean => AUTO_STORIES_PUBLISHED;
-export const AUTO_STORY_WARNING = "auto Stories are not published by weekpost yet; queued as manual: post it by hand";
+export const autoStoryWarning = (postId: string) => `${postId}: auto Stories are not published by weekpost yet; queued as manual: post it by hand (see \`package\`)`;
 
 export class PlanError extends Error {
   constructor(readonly problems: string[]) {
@@ -109,7 +109,7 @@ export function planWeek(input: PlanInput, autoPublished: () => boolean = autoSt
     }
     // The mode the queue gets: until the publisher posts Stories, an auto Story is posted by hand.
     const queuedMode = mode === "auto" && !autoPublished() ? "manual" : mode;
-    if (mode === "auto" && queuedMode === "manual" && !warnings.includes(AUTO_STORY_WARNING)) warnings.push(AUTO_STORY_WARNING);
+    if (mode === "auto" && queuedMode === "manual") warnings.push(autoStoryWarning(post.id));
 
     for (const acc of accounts) {
       const where = `${post.id}/${acc}`;

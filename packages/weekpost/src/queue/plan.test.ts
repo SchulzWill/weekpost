@@ -8,7 +8,7 @@ import { validateWeek } from "../content/week.ts";
 import { captionFor } from "../lint/caption.ts";
 import type { Manifest } from "../render/manifest.ts";
 import { testConfig } from "../../test/fixtures/brand.ts";
-import { AUTO_STORY_WARNING, localToUtc, planUpserts, planWeek, uploadsFor } from "./plan.ts";
+import { autoStoryWarning, localToUtc, planUpserts, planWeek, uploadsFor } from "./plan.ts";
 import type { QueueRow } from "./types.ts";
 
 const { config } = parseConfig(testConfig());
@@ -350,7 +350,7 @@ describe("planWeek: Story publish mode", () => {
   it("queues an auto Story as manual with no deadline, and warns once, while the publisher cannot post Stories", () => {
     const { rows, warnings } = modePlan("auto", 120, false);
     expect(rows.find((r) => r.postId === STORY)).toMatchObject({ status: "manual", publishMode: "manual", fallbackAt: null });
-    expect(warnings).toEqual([AUTO_STORY_WARNING]);
+    expect(warnings).toEqual([autoStoryWarning(STORY)]);
     expect(modePlan("manual", 120, false).warnings).toEqual([]);
     expect(modePlan("auto", 120, true).warnings).toEqual([]);
   });

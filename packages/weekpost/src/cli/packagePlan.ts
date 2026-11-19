@@ -12,9 +12,9 @@ const baseName = (file: string) => file.split("/").pop()!;
 // Story only: how it goes out, in one line for time.txt (empty for other posts, so they stay as they were).
 function storyLine(post: Manifest["posts"][number], time: string): string {
   if (post.type !== "story") return "";
-  if (post.storyMode === "auto") return "publishing: it goes out on its own, no need to post it\n";
+  if (post.storyMode === "auto") return "publishing: weekpost does not post Stories yet; post it by hand\n";
   if (post.fallbackAfterMinutes == null) return "publishing: post it by hand with the link sticker\n";
-  return `publishing: post it by hand with the link sticker until ${fallbackTime(time, post.fallbackAfterMinutes)}; after that it goes out without the sticker\n`;
+  return `publishing: post it by hand with the link sticker until ${fallbackTime(time, post.fallbackAfterMinutes)}; weekpost does not post it for you yet (the fallback is recorded only)\n`;
 }
 
 // Posts with an error in the manifest, or missing from it, are skipped.

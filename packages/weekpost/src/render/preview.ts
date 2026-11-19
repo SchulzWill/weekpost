@@ -36,15 +36,15 @@ function media(file: string, label: string, publish: string[] = []) {
   return `<a href="${esc(file)}" target="_blank"><img loading="lazy" src="${esc(file)}" alt="${esc(label)}"></a>`;
 }
 
-// Badge of a Story: how it is published and, for a manual one, when it goes out without the sticker.
+// Badge of a Story: how it is published and, for a manual one, its recorded fallback time.
 function storyBadge(p: Manifest["posts"][number], time: string): string {
   if (p.type !== "story" || !p.storyMode) return "";
   const text =
     p.storyMode === "auto"
-      ? "auto: publishes on its own"
+      ? "auto: weekpost does not post Stories yet, post it by hand"
       : p.fallbackAfterMinutes == null
         ? "manual: post it by hand with the link sticker"
-        : `manual: post it by hand until ${fallbackTime(time, p.fallbackAfterMinutes)}, then it goes out without the sticker`;
+        : `manual: post it by hand until ${fallbackTime(time, p.fallbackAfterMinutes)}, weekpost does not post it for you yet`;
   return ` <span class="badge">${esc(text)}</span>`;
 }
 

@@ -119,7 +119,7 @@ describe("weekpost generate --fake-media", () => {
     const [auto, manual] = manifest.posts;
     expect(auto.storyMode).toBe("auto");
     expect(auto.accounts.en.manual).toBeUndefined();
-    expect(auto.accounts.en.caption).toContain("Publishes on its own");
+    expect(auto.accounts.en.caption).toContain("weekpost does not post Stories yet");
     expect(manual).toMatchObject({ storyMode: "manual", fallbackAfterMinutes: 90 });
     expect(manual.accounts.en).toMatchObject({ publish: ["2026-10-13-story-m/en/story.jpg"], manual: "2026-10-13-story-m/en/story-manual.jpg" });
     expect(manual.accounts.en.caption).toContain("until 11:30");

@@ -185,13 +185,13 @@ describe("previewHtml", () => {
     expect(html).toContain('<div class="acc" lang="pt-PT">');
   });
 
-  it("badges each Story as auto or manual, with the time it goes out without the sticker", () => {
+  it("badges each Story as auto or manual, with the recorded fallback time", () => {
     const story = (over: Partial<Manifest["posts"][number]>): Manifest => ({
       ...manifest,
       posts: [{ ...manifest.posts[0], type: "story", coherence: [], accounts: { en: { files: ["s/en/story.jpg"], publish: ["s/en/story.jpg"], caption: "", sha256: { "s/en/story.jpg": HASH } } }, ...over }],
     });
-    expect(previewHtml(story({ storyMode: "auto" }), accounts)).toContain("auto: publishes on its own");
-    expect(previewHtml(story({ storyMode: "manual", fallbackAfterMinutes: 120 }), accounts)).toContain("manual: post it by hand until 13:00, then it goes out without the sticker");
+    expect(previewHtml(story({ storyMode: "auto" }), accounts)).toContain("auto: weekpost does not post Stories yet, post it by hand");
+    expect(previewHtml(story({ storyMode: "manual", fallbackAfterMinutes: 120 }), accounts)).toContain("manual: post it by hand until 13:00, weekpost does not post it for you yet");
     expect(previewHtml(story({ storyMode: "manual", fallbackAfterMinutes: null }), accounts)).toContain("manual: post it by hand with the link sticker");
     expect(previewHtml(manifest, accounts)).not.toContain('class="badge"');
   });

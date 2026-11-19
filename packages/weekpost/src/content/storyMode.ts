@@ -6,7 +6,7 @@ export function storyMode(post: Extract<Post, { type: "story" }>, config: Pick<W
   return post.story.publish ?? config.stories.publish;
 }
 
-// Local time (HH:MM) at which a manual Story goes out without the link sticker: the post time plus the fallback delay.
+// Local time (HH:MM) recorded as the fallback time of a manual Story (nothing publishes then yet): the post time plus the fallback delay.
 // Past midnight it is the next day, and the text says so (the queue holds the absolute instant).
 export function fallbackTime(time: string, minutes: number): string {
   const [h, m] = time.split(":").map(Number);
