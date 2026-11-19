@@ -12,6 +12,7 @@ How a release is cut: see [Releasing](docs/releasing.md).
 
 ### Improvements
 
+- The weekly `metrics` report now lists each manual Story whose time passed without a `resolve`, with the commands to close it. A late Story is no longer reported as a stopped queue.
 - `weekpost resolve` now closes a manual Story (one weekpost does not post, which you post by hand): `--published` after you post it (link optional), `--not-published` to cancel it.
 - Groundwork for optional automatic Stories: the queue now records whether each post is published automatically or by hand (`publish_mode`: `auto` or `manual`), and for a hand-posted Story, a time after which weekpost may publish it itself (`fallback_at`). Nothing uses this yet: Stories are still never published by weekpost.
 - Stories are still never published by weekpost: a Story set to `story.publish: auto` is queued as `manual` and `enqueue` warns; post it by hand. A manual Story's fallback time (`publish time + stories.fallbackAfterMinutes`) is recorded, and nothing happens at it yet.

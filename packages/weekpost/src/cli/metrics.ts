@@ -83,7 +83,7 @@ export async function runMetrics(args: string[], out: Out = console, cwd = proce
       overdue: await db.overdue(new Date(now.getTime() - OVERDUE_MINUTES * MINUTE).toISOString()),
       manual: await db.manualDue(weekStart, weekEnd),
       manualOverdue: await db.manualOverdue(now.toISOString()),
-      fallbacks: await db.storyFallbacks(new Date(now.getTime() - 7 * DAY).toISOString()),
+      // `db.storyFallbacks` (Stories the fallback sent) returns here when the publisher posts Stories.
       tokens: (await db.tokens()).map((t) => ({ account: t.account, expiresAt: t.expiresAt })),
       graph: { version: GRAPH_API_VERSION, ...graphVersionStatus(GRAPH_API_VERSION, now) },
       extra,

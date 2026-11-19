@@ -56,8 +56,6 @@ export interface ReportInput {
   manual: QueueRow[];
   /** Manual Stories whose time passed and nobody resolved. */
   manualOverdue: QueueRow[];
-  /** Stories that went out through the fallback (informative; empty until the publisher posts Stories). */
-  fallbacks: QueueRow[];
   tokens: Pick<Token, "account" | "expiresAt">[];
   graph: VersionStatus & { version: string };
   /** Rows from the `metrics.extra` hook; `null` when the hook is off. */
@@ -169,16 +167,12 @@ export function attentionLines(i: ReportInput): string[] {
   const due = i.manual.filter((r) => !unresolved.has(`${r.postId}/${r.account}`));
   if (due.length) {
     const ids = due.map((r) => `\`${clean(r.postId)}/${clean(r.account)}\``).join(", ");
-    out.push(`- **${due.length} Story(ies) to post by hand this week:** ${ids}. See \`npx weekpost status\`.`);
+    out.push(`- **${due.length} Story(ies) to post by hand this week:** ${ids}. Post them by hand with the files from \`npx weekpost package <week>\`, then \`npx weekpost resolve <post-id> --account=<a> --published\`.`);
   }
   for (const r of unresolved.values()) {
     const id = clean(r.postId);
     const a = clean(r.account);
-    out.push(`- **Story \`${id}/${a}\` was due ${clean(r.publishAt.slice(0, 16).replace("T", " "))} UTC and is not resolved.** Post it by hand, then \`npx weekpost resolve ${id} --account=${a} --published[=<link>]\`; or \`npx weekpost resolve ${id} --account=${a} --not-published\` if it will not be posted.`);
-  }
-  if (i.fallbacks.length) {
-    const ids = i.fallbacks.map((r) => `\`${clean(r.postId)}/${clean(r.account)}\``).join(", ");
-    out.push(`- **${i.fallbacks.length} Story(ies) went out through the fallback:** ${ids}. Nothing to do; check them on Instagram.`);
+    out.push(`- **Story \`${id}/${a}\` was due ${clean(r.publishAt.slice(0, 16).replace("T", " "))} UTC and is not resolved.** Post it by hand (files: \`npx weekpost package <week>\`), then \`npx weekpost resolve ${id} --account=${a} --published\` (add \`=<link>\` if you have it); or \`npx weekpost resolve ${id} --account=${a} --not-published\` if it will not be posted.`);
   }
   for (const m of i.collected.issues.filter((x) => x.kind === "rate-limit")) {
     out.push(`- **Meta's rate limit (80002) hit ${where(m)}:** ${clean(m.detail)}. The numbers not read this run come back on the next one.`);
