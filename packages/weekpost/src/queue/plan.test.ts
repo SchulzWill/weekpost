@@ -347,7 +347,7 @@ describe("planWeek: Story publish mode", () => {
     expect(storyRow("manual", 120)).toMatchObject({ status: "manual", publishMode: "manual", publishAt: "2026-10-13T07:00:00.000Z", fallbackAt: "2026-10-13T09:00:00.000Z" });
     expect(storyRow("manual", null).fallbackAt).toBeNull();
   });
-  it("queues an auto Story as manual with no deadline, and warns once, while the publisher cannot post Stories", () => {
+  it("queues an auto Story as manual with no deadline, and warns for the post, while the publisher cannot post Stories", () => {
     const { rows, warnings } = modePlan("auto", 120, false);
     expect(rows.find((r) => r.postId === STORY)).toMatchObject({ status: "manual", publishMode: "manual", fallbackAt: null });
     expect(warnings).toEqual([autoStoryWarning(STORY)]);
