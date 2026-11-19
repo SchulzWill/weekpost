@@ -68,6 +68,8 @@ describe("pure rules", () => {
   const opts = { rearm: false, zone: "Europe/Lisbon", now: NOW };
   it("reschedule allows scheduled only; failed needs --rearm", () => {
     expect(planReschedule(row(), at, opts).ok).toBe(true);
+    expect(planReschedule(row({ type: "story", publishMode: "auto" }), at, opts).ok).toBe(true); // an auto Story is like any other post
+    expect(planReschedule(row({ type: "story", status: "manual", publishMode: "manual" }), at, opts)).toMatchObject({ ok: false, reason: expect.stringContaining("Stories posted by hand") });
     expect(planReschedule(row({ status: "failed", attempts: 3 }), at, opts)).toMatchObject({ ok: false, reason: expect.stringContaining("--rearm") });
     expect(planReschedule(row({ status: "failed", attempts: 3 }), at, { ...opts, rearm: true })).toMatchObject({ ok: true, after: expect.stringContaining("attempts reset to 0") });
   });
@@ -175,11 +177,23 @@ describe("weekpost restore", () => {
   it.each<Status>(["scheduled", "manual", "failed", "publishing", "published"])("refuses %s: only a canceled post can be restored", (status) => {
     expect(planRestore(row({ status }), FUTURE)).toMatchObject({ ok: false, reason: expect.stringContaining(`status is ${status}`) });
   });
+  it("decides by the publish mode: auto goes back to scheduled, manual to manual, whatever the type", () => {
+    expect(planRestore(canceled({ type: "story", publishMode: "auto" }), FUTURE)).toMatchObject({ ok: true, after: expect.stringMatching(/^scheduled,/) });
+    expect(planRestore(canceled({ type: "story", publishMode: "manual", fallbackAt: "2026-10-15T09:00:00.000Z" }), FUTURE)).toMatchObject({ ok: true, after: expect.stringMatching(/^manual,/) });
+  });
+  it("refuses a past auto Story, and a manual one whose fallback time is past, unless --allow-past", () => {
+    const old = "2026-10-12T09:00:00.000Z";
+    expect(planRestore(canceled({ type: "story", publishMode: "auto", publishAt: old }), FUTURE)).toMatchObject({ ok: false, reason: expect.stringContaining("--allow-past") });
+    const manual = canceled({ type: "story", publishMode: "manual", publishAt: old, fallbackAt: old });
+    expect(planRestore(manual, FUTURE)).toMatchObject({ ok: false, reason: expect.stringContaining("fallback time") });
+    expect(planRestore(manual, { ...FUTURE, allowPast: true }).ok).toBe(true);
+    expect(planRestore({ ...manual, fallbackAt: null }, FUTURE).ok).toBe(true);
+  });
   it("refuses a time in the past unless --allow-past, because the post would go out at once", () => {
     const past = canceled({ publishAt: "2026-10-12T09:00:00.000Z" });
     expect(planRestore(past, FUTURE)).toMatchObject({ ok: false, reason: expect.stringContaining("--allow-past") });
     expect(planRestore(past, { ...FUTURE, allowPast: true })).toMatchObject({ ok: true, after: expect.stringContaining("goes out at the next publisher run") });
-    expect(planRestore(canceled({ type: "story", publishAt: "2026-10-12T09:00:00.000Z" }), FUTURE).ok).toBe(true);
+    expect(planRestore(canceled({ type: "story", publishAt: "2026-10-12T09:00:00.000Z" }), FUTURE).ok).toBe(true); // no mode (before migration 0007): a Story is manual, with no deadline
   });
   it("restores the post, shows before and after, and asks first", async () => {
     const { db, calls } = fake([canceled()]);

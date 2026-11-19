@@ -3,6 +3,7 @@ import { parseConfig } from "../config/index.ts";
 import type { WeekpostConfig } from "../config/schema.ts";
 import { contentHash } from "../content/hash.ts";
 import type { Post } from "../content/post.ts";
+import { storyMode } from "../content/storyMode.ts";
 import { validateWeek } from "../content/week.ts";
 import { captionFor } from "../lint/caption.ts";
 import type { Manifest } from "../render/manifest.ts";
@@ -56,6 +57,7 @@ function manifestFor(posts: Post[], cfg: WeekpostConfig = config): { manifest: M
       id: post.id, type: post.type, date: post.date, times: post.times,
       timeZones: Object.fromEntries(post.accounts.map((a) => [a, cfg.accounts[a].timeZone])),
       contentHash: contentHash(post), accounts, coherence: [],
+      ...(post.type === "story" ? { storyMode: storyMode(post, cfg), ...(storyMode(post, cfg) === "manual" ? { fallbackAfterMinutes: cfg.stories.fallbackAfterMinutes } : {}) } : {}),
     };
   });
   return { manifest: { version: 1, generator: "t", week: "2026-W42", spentUsd: 0, budgetUsd: 1, warnings: [], posts: entries }, hashes };
@@ -317,10 +319,111 @@ describe("planUpserts", () => {
     const r = planUpserts(rows(), [existing({ status: "failed", contentHash: sha("1") })]);
     expect(r.update).toHaveLength(1);
   });
-  it("does not push a Story into a status other than manual", () => {
-    const story = existing({ postId: "2026-10-13-story-a", status: "scheduled", contentHash: sha("1") });
-    const r = planUpserts(rows(), [story]);
-    expect(r.skipped.find((s) => s.key.includes("story"))?.reason).toBe("status is scheduled");
+});
+
+// Story publish modes: `auto` is queued as scheduled, `manual` as manual with a fallback deadline.
+const modeConfig = (publish: "auto" | "manual", fallbackAfterMinutes: number | null = null) =>
+  parseConfig({ ...testConfig(), stories: { publish, fallbackAfterMinutes } }).config;
+const modePlan = (publish: "auto" | "manual", fallbackAfterMinutes: number | null = null) => {
+  const cfg = modeConfig(publish, fallbackAfterMinutes);
+  const posts = load(cfg);
+  const { manifest, hashes } = manifestFor(posts, cfg);
+  return planWeek({ week: "2026-W42", posts, manifest, fileHashes: hashes, config: cfg });
+};
+const STORY = "2026-10-13-story-a";
+const storyRow = (publish: "auto" | "manual", fb: number | null = 120) => modePlan(publish, fb).rows.find((r) => r.postId === STORY)!;
+const queued = (planned: ReturnType<typeof storyRow>, over: Partial<QueueRow> = {}) =>
+  existing({ ...planned, status: planned.status, mediaHash: planned.mediaHash, contentHash: planned.contentHash, ...over });
+
+describe("planWeek: Story publish mode", () => {
+  it("queues an auto Story as scheduled/auto and leaves other posts as auto without a status", () => {
+    const rows = modePlan("auto").rows;
+    expect(rows.find((r) => r.postId === STORY)).toMatchObject({ status: "scheduled", publishMode: "auto", fallbackAt: null });
+    expect(rows[0]).toMatchObject({ publishMode: "auto", fallbackAt: null });
+    expect(rows[0].status).toBeUndefined();
+  });
+  it("queues a manual Story as manual with the fallback deadline after the publish time, or none", () => {
+    expect(storyRow("manual", 120)).toMatchObject({ status: "manual", publishMode: "manual", publishAt: "2026-10-13T07:00:00.000Z", fallbackAt: "2026-10-13T09:00:00.000Z" });
+    expect(storyRow("manual", null).fallbackAt).toBeNull();
+  });
+  it("refuses a manifest made with another Story mode", () => {
+    const cfg = modeConfig("manual", 60);
+    const posts = load(cfg);
+    const { manifest, hashes } = manifestFor(posts, modeConfig("auto"));
+    expect(() => planWeek({ week: "2026-W42", posts, manifest, fileHashes: hashes, config: cfg })).toThrow(/the Story mode changed since the preview: run generate again/);
+  });
+});
+
+describe("planUpserts: Story publish mode", () => {
+  const NOW = new Date("2026-10-13T08:00:00Z"); // after the Story's time (07:00Z), before its 09:00Z deadline
+  const at = (now: Date, allowPast = false) => ({ now, allowPast });
+  const only = (publish: "auto" | "manual", fb: number | null = 120) => [storyRow(publish, fb)];
+
+  it("skips a past auto Story, and --allow-past queues it", () => {
+    const r = planUpserts(only("auto"), [], undefined, at(NOW));
+    expect(r.insert).toEqual([]);
+    expect(r.skipped[0]).toMatchObject({ key: `${STORY}/en`, kind: "past" });
+    expect(planUpserts(only("auto"), [], undefined, at(NOW, true)).insert).toHaveLength(1);
+  });
+  it("judges a manual Story by its fallback time", () => {
+    expect(planUpserts(only("manual"), [], undefined, at(NOW)).insert).toHaveLength(1);
+    const late = planUpserts(only("manual"), [], undefined, at(new Date("2026-10-13T09:30:00Z")));
+    expect(late.skipped[0]).toMatchObject({ kind: "past", reason: expect.stringContaining("fallback time") });
+    expect(planUpserts(only("manual"), [], undefined, at(new Date("2026-10-13T09:30:00Z"), true)).insert).toHaveLength(1);
+    expect(planUpserts(only("manual", null), [], undefined, at(new Date("2027-01-01T00:00:00Z"))).insert).toHaveLength(1);
+  });
+  it("switches manual to auto on a manual row, writing scheduled and the mode", () => {
+    const found = queued(storyRow("manual"), { status: "manual", publishMode: "manual" });
+    const r = planUpserts(only("auto"), [found]);
+    expect(r.update).toHaveLength(1);
+    expect(r.update[0]).toMatchObject({ status: "scheduled", publishMode: "auto", mode: { from: "manual", publishMode: "auto", fallbackAt: null } });
+  });
+  it("switches auto to manual on a scheduled row, writing manual and the deadline", () => {
+    const found = queued(storyRow("auto"), { status: "scheduled", publishMode: "auto", fallbackAt: null });
+    const r = planUpserts(only("manual"), [found]);
+    expect(r.update[0]).toMatchObject({ status: "manual", mode: { from: "scheduled", publishMode: "manual", fallbackAt: "2026-10-13T09:00:00.000Z" } });
+  });
+  it.each(["publishing", "published"] as const)("does not switch a %s row", (status) => {
+    const r = planUpserts(only("auto"), [queued(storyRow("manual"), { status, publishMode: "manual" })]);
+    expect(r.update).toEqual([]);
+    expect(r.skipped[0].reason).toBe(`status is ${status}`);
+  });
+  it("does not switch a failed row but still edits its content, with no status or mode", () => {
+    const found = queued(storyRow("manual"), { status: "failed", publishMode: "manual", contentHash: sha("1") });
+    const r = planUpserts(only("auto"), [found]);
+    expect(r.skipped[0].reason).toBe("status is failed");
+    expect(r.update).toHaveLength(1);
+    expect(r.update[0].mode).toBeUndefined();
+    expect(r.update[0].status).toBeUndefined();
+  });
+  it("applies the past-time rules to a switch", () => {
+    const found = queued(storyRow("manual"), { status: "manual", publishMode: "manual" });
+    expect(planUpserts(only("auto"), [found], undefined, at(NOW)).skipped[0]).toMatchObject({ kind: "past" });
+    expect(planUpserts(only("auto"), [found], undefined, at(NOW, true)).update).toHaveLength(1);
+  });
+  describe("a fallback being retried (scheduled, manual)", () => {
+    const retry = (over: Partial<QueueRow> = {}) => queued(storyRow("manual"), { status: "scheduled", publishMode: "manual", ...over });
+    it("is no switch with YAML manual: new content is a plain update, otherwise unchanged", () => {
+      const edited = planUpserts(only("manual"), [retry({ contentHash: sha("1") })], undefined, at(new Date("2026-10-13T11:00:00Z")));
+      expect(edited.update).toHaveLength(1);
+      expect(edited.update[0].mode).toBeUndefined();
+      expect(edited.update[0].status).toBeUndefined();
+      expect(planUpserts(only("manual"), [retry({ fallbackAt: "2026-10-13T08:30:00.000Z" })]).skipped[0].reason).toBe("already queued, unchanged");
+    });
+    it("is a switch with YAML auto, read as scheduled", () => {
+      const r = planUpserts(only("auto"), [retry()]);
+      expect(r.update[0]).toMatchObject({ status: "scheduled", publishMode: "auto", mode: { from: "scheduled", publishMode: "auto" } });
+    });
+  });
+  it("is unchanged only when the mode and the deadline match too", () => {
+    const same = queued(storyRow("manual"), { status: "manual", publishMode: "manual" });
+    expect(planUpserts(only("manual"), [same]).skipped[0].reason).toBe("already queued, unchanged");
+    const moved = planUpserts(only("manual", 180), [same]);
+    expect(moved.update[0].mode).toMatchObject({ from: "manual", publishMode: "manual", fallbackAt: "2026-10-13T10:00:00.000Z" });
+  });
+  it("keeps the old status check for a row from before the mode existed", () => {
+    const legacy = { ...queued(storyRow("manual"), { status: "scheduled", contentHash: sha("1") }), publishMode: undefined, fallbackAt: undefined };
+    expect(planUpserts(only("manual"), [legacy]).skipped[0].reason).toBe("status is scheduled");
   });
 });
 

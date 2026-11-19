@@ -7,15 +7,16 @@ import type { Post } from "../content/post.ts";
 import { captionFor } from "../lint/caption.ts";
 import type { Manifest } from "../render/manifest.ts";
 import { realImageFile } from "../render/jobs.ts";
-import type { NewRow, QueueRow } from "./types.ts";
+import { storyMode } from "../content/storyMode.ts";
+import type { ModeSwitch, NewRow, QueueRow } from "./types.ts";
 
 export type Upload = { from: string; to: string; contentType: "image/jpeg" | "video/mp4" };
 export type PlannedRow = NewRow;
 export type SkippedAccount = string;
 /** `kind` names the categories the PR comment explains; the others (unchanged, wrong status) have none. */
 export type Skipped = { key: string; reason: string; kind?: "newer" | "operator" | "past" };
-/** An update; with `revive`, the row was canceled by the enqueue and comes back to the queue. */
-export type PlannedUpdate = PlannedRow & { revive?: true };
+/** An update; with `revive`, the row was canceled by the enqueue and comes back to the queue; with `mode`, a Story changes publish mode. */
+export type PlannedUpdate = PlannedRow & { revive?: true; mode?: ModeSwitch };
 export type Canceled = { key: string; reason: string };
 /** What the approved YAML says, to explain why a queued row is no longer wanted. */
 export type PlanContext = { postAccounts: Record<string, string[]>; skippedAccounts: string[] };
@@ -91,6 +92,11 @@ export function planWeek(input: PlanInput): { rows: PlannedRow[]; uploads: Uploa
       continue;
     }
     if (entry.type !== post.type) problems.push(`${post.id}: type ${entry.type} in the manifest, ${post.type} in the content`);
+    const mode = post.type === "story" ? storyMode(post, config) : null;
+    if (mode && entry.storyMode !== mode) {
+      problems.push(`${post.id}: the Story mode changed since the preview: run generate again (${entry.storyMode ?? "no mode"} in the manifest, ${mode} now)`);
+      continue;
+    }
 
     for (const acc of accounts) {
       const where = `${post.id}/${acc}`;
@@ -135,13 +141,17 @@ export function planWeek(input: PlanInput): { rows: PlannedRow[]; uploads: Uploa
       // never replace bytes a queued (or publishing) row still points to, and the CDN never serves a stale copy.
       const to = (f: string) => `${week}/${post.id}/${acc}/${fileHashes[f]}${f.slice(f.lastIndexOf("."))}`;
       for (const f of files) if (!uploads.some((u) => u.to === to(f))) uploads.push({ from: f, to: to(f), contentType: contentTypeOf(f) });
+      const publishAt = localToUtc(post.date, post.times[acc], zone);
+      const fallbackMin = config.stories.fallbackAfterMinutes;
       rows.push({
         postId: post.id, account: acc, type: post.type, week,
-        publishAt: localToUtc(post.date, post.times[acc], zone),
+        publishAt,
         caption, media: media.publish.map(to), cover: cover ? to(cover) : null,
         link: post.link?.[acc] ?? null, contentHash: hash,
         mediaHash: mediaHashOf(media.publish.map((f) => fileHashes[f]), cover ? fileHashes[cover] : null),
-        ...(post.type === "story" ? { status: "manual" as const } : {}),
+        ...(mode === "manual"
+          ? { status: "manual" as const, publishMode: "manual" as const, fallbackAt: fallbackMin == null ? null : new Date(new Date(publishAt).getTime() + fallbackMin * 60_000).toISOString() }
+          : { ...(post.type === "story" ? { status: "scheduled" as const } : {}), publishMode: "auto" as const, fallbackAt: null }),
       });
     }
   }
@@ -157,7 +167,7 @@ export type PlanOptions = {
   commit?: string;
   /** True when `ancestor` is `descendant` or one of its ancestors. */
   isAncestor?: (ancestor: string, descendant: string) => boolean;
-  /** The clock. With it, a post whose publish time has passed is skipped (Stories are exempt) unless `allowPast`. */
+  /** The clock. With it, a post whose publish time has passed is skipped unless `allowPast`. */
   now?: Date;
   allowPast?: boolean;
 };
@@ -172,7 +182,11 @@ export type PlanOptions = {
  *   with its own time. Stories are exempt (published by hand), and so is filling in the media hash of an old row.
  * - A `canceled` row stays canceled when the operator canceled it (`weekpost cancel`; `weekpost restore` undoes that). One the
  *   enqueue canceled (the post left the YAML) comes back, with the current content, when the YAML has it again.
- *   A Story is only rewritten while it is still `manual`.
+ *   A restored Story takes the status of the mode the YAML says.
+ * - A Story whose mode changed (by the row's `publishMode`, never by its status) while `scheduled` or `manual` becomes an
+ *   update with `mode`: status, mode and fallback move together, guarded by the status that was read. A manual Story whose
+ *   fallback is being retried is `scheduled` with `publishMode` `manual`: with YAML `manual` that is no switch. A `failed`
+ *   row never switches (its content still updates); rows from before migration 0007 have no mode and keep the old status check.
  * - A row with the same contentHash, media hash and publish time is skipped: the media already queued is not replaced.
  *   A different media hash (a second preview of the same YAML was approved) is an update, while the row is still editable.
  * - A `scheduled`, `failed` or `manual` row of the week that is not in the plan is canceled: the approved YAML is the source
@@ -192,11 +206,20 @@ export function planUpserts(
     opts.commit && opts.isAncestor && r.sourceCommit && !opts.isAncestor(r.sourceCommit, opts.commit)
       ? { key: key(r), kind: "newer", reason: `queued by a newer commit (${r.sourceCommit.slice(0, 7)}), this run reads ${opts.commit.slice(0, 7)}; left as it is` }
       : null;
-  /** A past time, as a skip; null when the post may be queued. Stories (`manual`) are exempt. */
-  const past = (row: PlannedRow, publishAt: string): Skipped | null =>
-    opts.now && !opts.allowPast && row.status !== "manual" && new Date(publishAt).getTime() < opts.now.getTime()
-      ? { key: key(row), kind: "past", reason: `publish time ${new Date(publishAt).toISOString()} is in the past; use --allow-past (the workflow input allow_past) to queue it anyway, or move the post to a future date` }
-      : null;
+  /** The fallback instant of a manual Story, moved along when the row keeps a publish time of its own. */
+  const fallbackFor = (row: PlannedRow, publishAt: string): string | null =>
+    row.fallbackAt ? new Date(new Date(publishAt).getTime() + (new Date(row.fallbackAt).getTime() - new Date(row.publishAt).getTime())).toISOString() : null;
+  /** A past time, as a skip; null when the post may be queued. A manual Story is judged by its fallback time (none: never past). */
+  const past = (row: PlannedRow, publishAt: string): Skipped | null => {
+    if (!opts.now || opts.allowPast) return null;
+    const manual = row.status === "manual";
+    const at = manual ? fallbackFor(row, publishAt) : publishAt;
+    if (!at || new Date(at).getTime() >= opts.now.getTime()) return null;
+    return {
+      key: key(row), kind: "past",
+      reason: `${manual ? "fallback" : "publish"} time ${new Date(at).toISOString()} is in the past; use --allow-past (the workflow input allow_past) to queue it anyway, or move the post to a future date`,
+    };
+  };
   for (const old of existing) {
     if (planned.has(key(old)) || !(["scheduled", "failed", "manual"] as const).includes(old.status as "scheduled")) continue;
     const stale = newer(old);
@@ -225,18 +248,40 @@ export function planUpserts(
         else if (late) skipped.push(late);
         else update.push({ ...row, publishAt, revive: true });
       }
-    } else if (row.status && found.status !== row.status) skipped.push({ key: key(row), reason: `status is ${found.status}` });
-    else {
+    } else if (!found.publishMode && row.type === "story" && row.status && found.status !== row.status) {
+      // A row from before migration 0007 has no mode: the status is all there is to go by.
+      skipped.push({ key: key(row), reason: `status is ${found.status}` });
+    } else {
       const publishAt = found.rescheduledAt ? found.publishAt : row.publishAt;
-      if (found.contentHash === row.contentHash && (found.mediaHash ?? null) === row.mediaHash && sameInstant(found.publishAt, publishAt)) skipped.push({ key: key(row), reason: "already queued, unchanged" });
-      else {
-        const stale = newer(found);
-        // Filling in the hash of a row written before it existed changes nothing the publisher would act on.
-        const backfill = found.contentHash === row.contentHash && sameInstant(found.publishAt, publishAt) && found.mediaHash == null;
-        const late = backfill ? null : past(row, publishAt);
+      const fallbackAt = fallbackFor(row, publishAt);
+      const stale = newer(found);
+      const switches = row.type === "story" && found.publishMode !== undefined && row.publishMode !== undefined && row.publishMode !== found.publishMode;
+      const editable = found.status === "scheduled" || found.status === "manual";
+      // A manual Story whose fallback failed once is back to `scheduled`: its deadline is already behind it.
+      const retrying = found.status === "scheduled" && found.publishMode === "manual" && row.publishMode === "manual";
+      // A manual Story's deadline moved (another time or fallback delay): written with the mode, as the status stays `manual`.
+      const deadlineMoved = row.publishMode === "manual" && found.status === "manual" && (found.fallbackAt ?? null) !== fallbackAt && !(found.fallbackAt && fallbackAt && sameInstant(found.fallbackAt, fallbackAt));
+      if (switches && editable) {
+        const late = past(row, publishAt);
         if (stale) skipped.push(stale);
         else if (late) skipped.push(late);
-        else update.push({ ...row, publishAt });
+        else update.push({ ...row, publishAt, fallbackAt, mode: { from: found.status, publishMode: row.publishMode!, fallbackAt } });
+        continue;
+      }
+      if (switches) skipped.push({ key: key(row), reason: `status is ${found.status}` });
+      // Content only: the status, the mode and the deadline of a row that stays as it is are not written.
+      const { status: _s, publishMode: _m, fallbackAt: _f, ...content } = row;
+      const keep: PlannedRow = switches || retrying || found.status === "failed" ? content : row;
+      if (found.contentHash === row.contentHash && (found.mediaHash ?? null) === row.mediaHash && sameInstant(found.publishAt, publishAt) && !deadlineMoved) {
+        if (!switches) skipped.push({ key: key(row), reason: "already queued, unchanged" });
+      } else {
+        // Filling in the hash of a row written before it existed changes nothing the publisher would act on.
+        const backfill = found.contentHash === row.contentHash && sameInstant(found.publishAt, publishAt) && found.mediaHash == null;
+        const late = backfill || retrying ? null : past(row, publishAt);
+        if (stale) skipped.push(stale);
+        else if (late) skipped.push(late);
+        else if (deadlineMoved && !switches) update.push({ ...row, publishAt, fallbackAt, mode: { from: "manual", publishMode: "manual", fallbackAt } });
+        else update.push({ ...keep, publishAt });
       }
     }
   }

@@ -52,17 +52,19 @@ export function planCancel(r: QueueRow): Change {
   return { ok: true, key: r, before: r.status, after: "canceled" };
 }
 
-/** Undoes a cancel. A time already past is refused unless `allowPast`: the row would be due at once (Stories are published by hand, so they are exempt). */
+/** Undoes a cancel. A time already past is refused unless `allowPast`: the row would be due at once. A manual Story is judged by its fallback time (none: never past). */
 export function planRestore(r: QueueRow, opts: { zone?: string; now: Date; allowPast: boolean }): Change {
   if (r.status !== "canceled") return refuse(r, `cannot restore ${label(r)}: status is ${r.status}; only a canceled post can be restored`);
   const when = `${formatLocal(r.publishAt, opts.zone)} ${opts.zone ?? "UTC"}`;
-  const past = r.type !== "story" && new Date(r.publishAt).getTime() <= opts.now.getTime();
+  const manual = (r.publishMode ?? (r.type === "story" ? "manual" : "auto")) === "manual";
+  const due = manual ? r.fallbackAt : r.publishAt;
+  const past = Boolean(due) && new Date(due as string).getTime() <= opts.now.getTime();
   if (past && !opts.allowPast) {
-    return refuse(r, `cannot restore ${label(r)}: its time ${when} is in the past, so it would go out at once; use --allow-past if that is what you want`);
+    return refuse(r, `cannot restore ${label(r)}: its ${manual ? "fallback time" : "time"} ${formatLocal(due as string, opts.zone)} ${opts.zone ?? "UTC"} is in the past, so it would go out at once; use --allow-past if that is what you want`);
   }
   return {
     ok: true, key: r, before: `canceled (by the ${r.canceledBy === "enqueue" ? "enqueue" : "operator"})`,
-    after: `${r.type === "story" ? "manual" : "scheduled"}, ${when}${past ? " (in the past: it goes out at the next publisher run)" : ""}`,
+    after: `${manual ? "manual" : "scheduled"}, ${when}${past ? " (in the past: it goes out at the next publisher run)" : ""}`,
   };
 }
 
@@ -80,7 +82,7 @@ export function planReschedule(r: QueueRow, publishAt: string, opts: { rearm: bo
   if (r.status === "failed" && !opts.rearm) return refuse(r, `cannot reschedule ${label(r)}: it failed (${r.attempts} attempt(s)); use --rearm to try again`);
   if (r.status !== "scheduled" && r.status !== "failed") {
     const why: Partial<Record<Status, string>> = {
-      publishing: "it is being published right now", published: "it is already published", canceled: "it is canceled", manual: "Stories are published by hand",
+      publishing: "it is being published right now", published: "it is already published", canceled: "it is canceled", manual: "Stories posted by hand",
     };
     return refuse(r, `cannot reschedule ${label(r)}: status is ${r.status}${why[r.status] ? ` (${why[r.status]})` : ""}`);
   }

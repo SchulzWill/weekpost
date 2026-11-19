@@ -130,7 +130,7 @@ export const configSchema = z.strictObject({
         .number({ error: "stories.fallbackAfterMinutes: use a whole number of minutes from 15 to 1380, or null for no fallback" })
         .int("stories.fallbackAfterMinutes: use a whole number of minutes from 15 to 1380, or null for no fallback")
         .min(15, "stories.fallbackAfterMinutes: use at least 15 minutes, or null for no fallback")
-        .max(1380, "stories.fallbackAfterMinutes: use at most 1380 minutes (23 h), so the fallback runs before the day ends")
+        .max(1380, "stories.fallbackAfterMinutes: use at most 1380 minutes (23 h), so the fallback runs within a day of the post")
         .nullable()
         .default(null),
     })

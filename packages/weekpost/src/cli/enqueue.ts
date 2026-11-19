@@ -107,7 +107,11 @@ export async function runEnqueue(args: string[], out: Out = console, cwd = proce
   const dryRun = args.includes("--dry-run");
   const allowPast = args.includes("--allow-past");
   const now = (deps.now ?? (() => new Date()))().getTime();
-  const isPast = (r: PlannedRow) => r.status !== "manual" && new Date(r.publishAt).getTime() < now;
+  // A manual Story is judged by its fallback time (none: never past); everything else by its publish time.
+  const isPast = (r: PlannedRow) => {
+    const at = r.status === "manual" ? r.fallbackAt : r.publishAt;
+    return Boolean(at) && new Date(at as string).getTime() < now;
+  };
   const summaryFile = opt("summary");
   if (!artifactDir || !weeksFile) {
     out.error(USAGE);
@@ -191,9 +195,9 @@ export async function runEnqueue(args: string[], out: Out = console, cwd = proce
 
   if (dryRun) {
     for (const p of plans) {
-      for (const r of p.rows) out.log(`  ${r.postId}/${r.account} ${r.type} ${r.publishAt} ${r.status ?? "scheduled"} ${r.media.length} file(s)`);
+      for (const r of p.rows) out.log(`  ${r.postId}/${r.account} ${r.type} ${r.publishAt} ${r.status ?? "scheduled"}${r.fallbackAt ? ` (fallback ${r.fallbackAt})` : ""} ${r.media.length} file(s)`);
       for (const s of p.skippedAccounts) out.log(`  skip ${s} (account not in enqueue_accounts)`);
-      for (const r of p.rows.filter(isPast)) out.log(`  past ${r.postId}/${r.account} ${r.publishAt}${allowPast ? "" : " (skipped without --allow-past)"}`);
+      for (const r of p.rows.filter(isPast)) out.log(`  past ${r.postId}/${r.account} ${r.status === "manual" ? r.fallbackAt : r.publishAt}${allowPast ? "" : " (skipped without --allow-past)"}`);
     }
     // With a queue to read (credentials or an injected db) the dry run also shows what would be canceled; it never writes.
     if (deps.db || supabaseEnv) {
@@ -241,7 +245,7 @@ export async function runEnqueue(args: string[], out: Out = console, cwd = proce
         await db.cancel({ postId, account }, "enqueue", stamp);
       }
       await db.insert(decision.insert.map((r) => ({ ...r, ...stamp })));
-      for (const r of decision.update) await db.updateContent({ postId: r.postId, account: r.account }, { ...r, ...stamp }, { revive: r.revive });
+      for (const r of decision.update) await db.updateContent({ postId: r.postId, account: r.account }, { ...r, ...stamp }, { revive: r.revive, mode: r.mode });
       summary.scheduled += decision.insert.length + decision.update.length;
       summary.updated += decision.update.length;
       summary.canceled.push(...decision.cancel);

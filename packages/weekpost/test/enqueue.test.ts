@@ -347,4 +347,48 @@ describe("weekpost enqueue", () => {
     expect(lines[0]).toContain("0 scheduled, 0 skipped");
     expect(JSON.parse(readFileSync(join(dir, "zero.json"), "utf8"))).toEqual({ scheduled: 0, updated: 0, skipped: [], canceled: [] });
   });
+
+  describe("Story publish mode", () => {
+    let mdir: string;
+    const manualConfig = (publish: "auto" | "manual", minutes: number | null) => {
+      const input = testConfig();
+      input.accounts = { en: input.accounts.en };
+      writeFileSync(join(mdir, "weekpost.config.ts"), `export default ${JSON.stringify({ ...input, stories: { publish, fallbackAfterMinutes: minutes } })};\n`);
+    };
+    beforeAll(async () => {
+      mdir = testProject();
+      manualConfig("manual", 120);
+      mkdirSync(join(mdir, "content", "2026-W42"), { recursive: true });
+      writeFileSync(join(mdir, "content", "2026-W42", "posts.yaml"), WEEK);
+      writeFileSync(join(mdir, "weeks.txt"), "2026-W42\n");
+      expect(await runGenerate(["2026-W42", "--fake-media"], capture().out, mdir)).toBe(0);
+    });
+    const margs = (...extra: string[]) => ["out", `--weeks=${join(mdir, "weeks.txt")}`, ...extra];
+
+    it("--dry-run shows the status and the fallback deadline of a manual Story", async () => {
+      const { lines, out } = capture();
+      expect(await runEnqueue(margs("--dry-run"), out, mdir, { env: {}, now: before })).toBe(0);
+      expect(lines.join("\n")).toMatch(/2026-10-13-story-a\/en story 2026-10-13T07:00:00.000Z manual \(fallback 2026-10-13T09:00:00.000Z\) 1 file/);
+    });
+
+    it("skips a manual Story whose fallback time is past, and --allow-past queues it", async () => {
+      const after = () => new Date("2026-10-13T09:30:00Z");
+      const q = fakeQueue();
+      const { lines, out } = capture();
+      expect(await runEnqueue(margs(), out, mdir, { db: q.db, storage: q.storage, now: after })).toBe(0);
+      expect(q.inserted.map((r) => r.postId)).toEqual([]);
+      expect(lines.join("\n")).toContain("skip 2026-10-13-story-a/en");
+      const q2 = fakeQueue();
+      expect(await runEnqueue(margs("--allow-past"), capture().out, mdir, { db: q2.db, storage: q2.storage, now: after })).toBe(0);
+      expect(q2.inserted.find((r) => r.postId === "2026-10-13-story-a")).toMatchObject({ status: "manual", publishMode: "manual", fallbackAt: "2026-10-13T09:00:00.000Z" });
+    });
+
+    it("refuses the artifact when the Story mode changed since the preview", async () => {
+      manualConfig("auto", null);
+      const { lines, out } = capture();
+      expect(await runEnqueue(margs("--dry-run"), out, mdir, { env: {}, now: before })).toBe(1);
+      expect(lines.join("\n")).toContain("the Story mode changed since the preview: run generate again");
+      manualConfig("manual", 120);
+    });
+  });
 });
