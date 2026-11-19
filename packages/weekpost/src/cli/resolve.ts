@@ -8,7 +8,7 @@ import { confirmChanges, connect, optionOf, positional, type OperateDeps } from 
 const USAGE = [
   "usage: weekpost resolve <post-id> --account=<id> (--published[=<permalink>] | --not-published) [--yes]",
   "  stuck in publishing: --published=<permalink> (link required) or --not-published (queue it again)",
-  "  manual Story: --published[=<permalink>] (you posted it) or --not-published (cancel it)",
+  "  manual Story: --published[=<permalink>] (you posted it) or --not-published (cancel it; weekpost restore undoes this)",
 ].join("\n");
 
 export async function runResolve(args: string[], out: Out = console, cwd = process.cwd(), deps: OperateDeps = {}): Promise<number> {

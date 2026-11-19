@@ -30,7 +30,7 @@ export function statusLine(r: QueueRow, zones: Zones): string {
   const zone = zones[r.account];
   const bits = [`${label(r)}`, r.status.padEnd(10), `${formatLocal(r.publishAt, zone)} ${zone ?? "UTC"}`];
   if (r.rescheduledAt) bits.push("(time set by the CLI)");
-  if (r.publishMode && r.publishMode !== r.status) bits.push(`mode ${r.publishMode}`);
+  if (r.publishMode === "manual" && r.status !== "manual") bits.push("(Story, posted by hand)");
   if (r.attempts > 0 && r.status !== "published") bits.push(`attempts ${r.attempts}`);
   if (r.status === "published" && r.permalink) bits.push(r.permalink);
   if (r.status === "canceled") bits.push(`(canceled by the ${r.canceledBy === "enqueue" ? "enqueue" : "operator"})`);
@@ -116,7 +116,7 @@ export function planResolve(r: QueueRow, action: ResolveAction, now: Date): Chan
 
 function planResolveManual(r: QueueRow, action: ResolveAction): Change {
   if (r.publishMode === undefined) return refuse(r, `cannot resolve ${label(r)}: the database is older than this version; run migration 0007_stories.sql first (npx weekpost upgrade --apply)`);
-  const before = r.status === "manual" ? "manual" : "scheduled (an automatic try failed and it was queued again)";
+  const before = r.status === "manual" ? "manual" : "scheduled (a Story to post by hand)";
   if (!action.published) return { ok: true, key: r, before, after: "canceled: it will not be posted" };
   if (action.permalink && !/^https:\/\/[^\s]+$/.test(action.permalink)) return refuse(r, `--published needs the post's https link, got "${action.permalink}"`);
   return { ok: true, key: r, before, after: `published${action.permalink ? ` (${action.permalink})` : ""}: you posted it by hand` };

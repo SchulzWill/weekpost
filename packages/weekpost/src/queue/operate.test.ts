@@ -310,10 +310,10 @@ describe("planResolve for every status and flag", () => {
       expect(planResolve(r, action, NOW).ok).toBe(ok);
     });
   }
-  it("status line shows the mode only when it differs from the status", () => {
-    expect(statusLine(row({ type: "story", status: "manual", publishMode: "manual" }), zones)).not.toContain("mode");
-    expect(statusLine(row({ type: "story", status: "scheduled", publishMode: "manual" }), zones)).toContain("mode manual");
-    expect(statusLine(row({ type: "story", status: "scheduled", publishMode: "auto" }), zones)).toContain("mode auto");
+  it("status line marks a Story queued as manual that is not in `manual`", () => {
+    expect(statusLine(row({ type: "story", status: "manual", publishMode: "manual" }), zones)).not.toContain("Story");
+    expect(statusLine(row({ type: "story", status: "scheduled", publishMode: "manual" }), zones)).toContain("(Story, posted by hand)");
+    expect(statusLine(row({ type: "story", status: "scheduled", publishMode: "auto" }), zones)).not.toContain("Story");
     expect(statusLine(row(), zones)).not.toContain("mode");
   });
 });
