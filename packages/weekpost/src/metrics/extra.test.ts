@@ -64,7 +64,7 @@ describe("runExtra", () => {
 });
 
 describe("metrics report with the hook", () => {
-  const base = { collected: { rows: [], issues: [], accounts: [], posts: [] }, failed: [], stuck: [], overdue: [], manual: [], tokens: [], graph: { version: "v26.0", level: "ok", detail: "" } } as never;
+  const base = { collected: { rows: [], issues: [], accounts: [], posts: [] }, failed: [], stuck: [], overdue: [], manual: [], manualOverdue: [], tokens: [], graph: { version: "v26.0", level: "ok", detail: "" } } as never;
   const input = (extra: never, extraError?: string) => ({ ...(base as object), now: new Date("2026-11-02T08:00:00Z"), extra, ...(extraError ? { extraError } : {}) }) as unknown as Parameters<typeof buildReport>[0];
 
   it("is off by default", () => {

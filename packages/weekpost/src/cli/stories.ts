@@ -1,17 +1,19 @@
 // weekpost stories --remind [--issue] [--json] [--repo=<owner/name>] [--project=<dir>]
 // weekpost does not post Stories: you post each one by hand, with the link sticker. This command reminds you. It lists the
-// manual Stories whose time falls in the next hour and prints what to do for each. `--issue` also opens one GitHub issue
+// manual Stories that are due within the next hour, or were due in the last 24 hours and are still unresolved (a late or
+// skipped run loses nothing), and prints what to do for each. `--issue` also opens one GitHub issue
 // per Story (label `story`, one per post and account) and closes the issue of a Story you have since settled (published
 // or canceled). It writes to GitHub, so it is denied to the agent and meant for CI. Without `--issue` it only prints.
 // An issue stays open while the row is `publishing`, `failed`, or `scheduled` as a manual Story: that is for you to decide.
 import { GithubIssues, STORY_LABEL } from "../metrics/github.ts";
 import { formatLocal, weekOfPostId } from "../queue/operate.ts";
-import type { Fetch, OperatorDb, QueueRow } from "../queue/types.ts";
+import type { Fetch, MetricsDb, OperatorDb, QueueRow } from "../queue/types.ts";
 import { projectPaths, type Out } from "./check.ts";
 import { connect, optionOf, type OperateDeps } from "./queueCommon.ts";
 import { hasTty, withLocalEnv } from "./secrets.ts";
 
 const HOUR = 3_600_000;
+const LOOKBACK = 24 * HOUR;
 
 export type StoriesDeps = OperateDeps & { fetch?: Fetch };
 
@@ -21,6 +23,12 @@ const USAGE = "usage: weekpost stories --remind [--issue] [--json] [--repo=<owne
 export const storyIssueTitle = (r: { postId: string; account: string }) => `weekpost story: ${r.postId}/${r.account}`;
 const TITLE = /^weekpost story: (\S+)\/([^/\s]+)$/;
 
+/** A link as inline code: backticks and newlines removed, so `@user` or `#123` in it never notifies or cross-links. */
+const codeLink = (link: string | null) => {
+  const clean = (link ?? "").replace(/[`\r\n]/g, "").trim();
+  return clean ? `\`${clean}\`` : "none";
+};
+
 export function storyIssueBody(r: QueueRow, zone: string | undefined): string {
   const at = `${formatLocal(r.publishAt, zone)} ${zone ?? "UTC"}`;
   const key = `${r.postId} --account=${r.account}`;
@@ -28,12 +36,13 @@ export function storyIssueBody(r: QueueRow, zone: string | undefined): string {
     `Post this Story by hand at **${at}**. weekpost does not post Stories.`,
     "",
     `- Post: \`${r.postId}\` (account \`${r.account}\`)`,
-    `- Link to put on the link sticker: ${r.link ?? "none"}`,
+    `- Link to put on the link sticker: ${codeLink(r.link)}`,
     "",
-    "1. Get the files and the caption:",
+    `1. In your project folder, get the files and the caption (needs the week's media in out/; run \`npx weekpost generate ${r.week}\` first if it is missing):`,
     `   \`npx weekpost package ${r.week} --post=${r.postId}\``,
-    "2. After you post it, record it (the link of the Story is optional):",
-    `   \`npx weekpost resolve ${key} --published[=<link>]\``,
+    "2. After you post it, record it:",
+    `   \`npx weekpost resolve ${key} --published\``,
+    "   (or add the Story's link: `--published=https://www.instagram.com/stories/...`)",
     "3. If you will not post it:",
     `   \`npx weekpost resolve ${key} --not-published\``,
     "",
@@ -49,6 +58,11 @@ export async function runStories(args: string[], out: Out = console, cwd = proce
   }
   const issue = args.includes("--issue");
   const json = args.includes("--json");
+  const guardEnv = deps.env ?? process.env;
+  if (issue && (guardEnv.GITHUB_ACTIONS !== "true" || !guardEnv.GITHUB_TOKEN?.trim())) {
+    out.error("error: --issue runs only in the weekpost-stories workflow (GITHUB_ACTIONS=true and GITHUB_TOKEN set); run `weekpost stories --remind` without --issue to print the reminders");
+    return 1;
+  }
   const now = (deps.now ?? (() => new Date()))();
   const env = withLocalEnv(deps.env ?? process.env, projectPaths(args, cwd).projectRoot, deps.home, issue ? { tty: deps.tty ?? hasTty() } : undefined);
   const conn = await connect(args, out, cwd, { ...deps, env }, false);
@@ -57,7 +71,10 @@ export async function runStories(args: string[], out: Out = console, cwd = proce
 
   try {
     const until = new Date(now.getTime() + HOUR).toISOString();
-    const due = (await db.rows({ status: ["manual"] })).filter((r) => r.publishAt >= now.toISOString() && r.publishAt < until);
+    const since = new Date(now.getTime() - LOOKBACK).toISOString();
+    const manualDue = (db as Partial<MetricsDb>).manualDue;
+    if (!manualDue) throw new Error("this queue connection cannot list the manual Stories");
+    const due = await manualDue.call(db, since, until);
     const reminders: { postId: string; account: string; publishAt: string; local: string; issue: string; url?: string }[] = [];
     const closed: { number: number; title: string; status: string }[] = [];
 
@@ -69,7 +86,11 @@ export async function runStories(args: string[], out: Out = console, cwd = proce
       const entry = { postId: r.postId, account: r.account, publishAt: r.publishAt, local: `${formatLocal(r.publishAt, zones[r.account])} ${zones[r.account] ?? "UTC"}`, issue: "not requested" };
       if (gh) {
         const found = existing.find((i) => i.title === title);
-        if (found) Object.assign(entry, { issue: "exists", url: found.url });
+        if (found?.state === "closed") {
+          await gh.reopen(found.number, "Reopened: the Story is waiting to be posted again.");
+          found.state = "open";
+          Object.assign(entry, { issue: "reopened", url: found.url });
+        } else if (found) Object.assign(entry, { issue: "exists", url: found.url });
         else {
           const made = await gh.create(title, storyIssueBody(r, zones[r.account]), STORY_LABEL);
           existing.push({ number: made.number, title, state: "open", url: made.url });
@@ -83,7 +104,7 @@ export async function runStories(args: string[], out: Out = console, cwd = proce
 
     if (json) out.log(JSON.stringify({ until, reminders, closed }, null, 2));
     else {
-      if (!reminders.length) out.log("no manual Story in the next hour");
+      if (!reminders.length) out.log("no manual Story to remind about");
       for (const r of reminders) out.log(`${r.local}  ${r.postId}/${r.account}: post it by hand${r.issue === "not requested" ? "" : ` (issue ${r.issue}${r.url ? `: ${r.url}` : ""})`}`);
       for (const c of closed) out.log(`closed #${c.number}: ${c.title} (${c.status})`);
       if (!issue && reminders.length) out.error("nothing written: pass --issue (in CI) to open the issues");
@@ -109,8 +130,9 @@ async function closeSettled(gh: GithubIssues, db: OperatorDb, open: { number: nu
     }
     if (!byWeek.has(week)) byWeek.set(week, await db.rows({ week }));
     const row = byWeek.get(week)!.find((r) => r.postId === m[1] && r.account === m[2]);
-    if (row?.status !== "published" && row?.status !== "canceled") continue;
-    await gh.close(i.number, row.status === "published" ? "Recorded as published." : "Recorded as canceled: the Story will not be posted.");
-    closed.push({ number: i.number, title: i.title, status: row.status });
+    if (row && row.status !== "published" && row.status !== "canceled") continue;
+    const status = row?.status ?? "missing";
+    await gh.close(i.number, status === "published" ? "Recorded as published." : status === "canceled" ? "Recorded as canceled: the Story will not be posted." : "The queued Story no longer exists.");
+    closed.push({ number: i.number, title: i.title, status });
   }
 }

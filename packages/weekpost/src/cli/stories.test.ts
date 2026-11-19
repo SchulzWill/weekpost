@@ -4,7 +4,7 @@ import { runStories } from "./stories.ts";
 
 const GH = "ghs_actionsTokenValue1234567890";
 const NOW = new Date("2026-10-26T11:07:00Z");
-const ENV = { GITHUB_REPOSITORY: "o/r", GITHUB_TOKEN: GH };
+const ENV = { GITHUB_REPOSITORY: "o/r", GITHUB_TOKEN: GH, GITHUB_ACTIONS: "true" };
 
 const row = (over: Partial<QueueRow> = {}): QueueRow => ({
   postId: "2026-10-26-s", account: "en", type: "story", week: "2026-W44", publishAt: "2026-10-26T11:30:00Z", caption: "c", media: ["a.jpg"],
@@ -12,7 +12,10 @@ const row = (over: Partial<QueueRow> = {}): QueueRow => ({
   mediaId: null, permalink: null, lastError: null, publishedAt: null, mediaPurgedAt: null, rescheduledAt: null, publishMode: "manual", fallbackAt: "2026-10-26T12:30:00Z", ...over,
 });
 
-const dbOf = (rows: QueueRow[]) => ({ rows: async (f: { week?: string; status?: Status[] }) => rows.filter((r) => (!f.week || r.week === f.week) && (!f.status || f.status.includes(r.status))) }) as unknown as OperatorDb;
+const dbOf = (rows: QueueRow[]) => ({
+  rows: async (f: { week?: string; status?: Status[] }) => rows.filter((r) => (!f.week || r.week === f.week) && (!f.status || f.status.includes(r.status))),
+  manualDue: async (a: string, b: string) => rows.filter((r) => r.status === "manual" && Date.parse(r.publishAt) >= Date.parse(a) && Date.parse(r.publishAt) < Date.parse(b)),
+}) as unknown as OperatorDb;
 
 type Issue = { number: number; title: string; body: string; state: "open" | "closed"; labels: string[]; comments: string[] };
 function world(seed: Issue[] = []) {
@@ -66,10 +69,10 @@ describe("weekpost stories --remind", () => {
     expect(r.err).toContain("nothing written");
   });
 
-  it("only lists manual Stories due in the next hour", async () => {
+  it("only lists manual Stories due within the next hour or still unresolved from the last 24 hours", async () => {
     const rows = [row(), row({ postId: "2026-10-26-late", publishAt: "2026-10-26T12:07:00Z" }), row({ postId: "2026-10-26-past", publishAt: "2026-10-26T11:06:00Z" }), row({ postId: "2026-10-26-sched", status: "scheduled" })];
     const r = await run(["--remind", "--json"], rows);
-    expect(JSON.parse(r.out).reminders.map((x: { postId: string }) => x.postId)).toEqual(["2026-10-26-s"]);
+    expect(JSON.parse(r.out).reminders.map((x: { postId: string }) => x.postId)).toEqual(["2026-10-26-s", "2026-10-26-past"]);
   });
 
   it("--issue creates one issue with the time, the link and the commands, and creates it only once", async () => {
@@ -80,9 +83,12 @@ describe("weekpost stories --remind", () => {
     const [i] = w.issues;
     expect(i).toMatchObject({ title: TITLE, labels: ["story"] });
     expect(i!.body).toContain("2026-10-26 07:30 America/New_York");
-    expect(i!.body).toContain("https://example.com/p");
+    expect(i!.body).toContain("`https://example.com/p`");
+    expect(i!.body).toContain("npx weekpost generate 2026-W44");
+    expect(i!.body).toContain("--published=https://www.instagram.com/stories/...");
+    expect(i!.body).not.toContain("[=");
     expect(i!.body).toContain("npx weekpost package 2026-W44 --post=2026-10-26-s");
-    expect(i!.body).toContain("npx weekpost resolve 2026-10-26-s --account=en --published[=<link>]");
+    expect(i!.body).toContain("npx weekpost resolve 2026-10-26-s --account=en --published`");
     expect(i!.body).toContain("npx weekpost resolve 2026-10-26-s --account=en --not-published");
     expect(i!.body).not.toMatch(/fallback|automatic/i);
     expect(first.out).toContain("issue created: https://github.com/o/r/issues/1");
@@ -93,10 +99,42 @@ describe("weekpost stories --remind", () => {
     expect(second.out).toContain("issue exists");
   });
 
-  it("does not open a second issue when the first one was already closed", async () => {
+  it("reopens a closed issue when the Story is manual again, without opening a second one", async () => {
     const w = world([open({ state: "closed" })]);
-    await run(["--remind", "--issue"], [row()], w.fetchFn);
+    const r = await run(["--remind", "--issue"], [row()], w.fetchFn);
     expect(w.issues).toHaveLength(1);
+    expect(w.issues[0]!.state).toBe("open");
+    expect(r.out).toContain("issue reopened");
+  });
+
+  it("reminds about a Story that was due up to 24 hours ago, but not older ones", async () => {
+    const rows = [row({ postId: "2026-10-25-a", publishAt: "2026-10-25T13:00:00+00:00" }), row({ postId: "2026-10-24-b", publishAt: "2026-10-24T10:00:00Z" })];
+    const r = await run(["--remind", "--json"], rows);
+    expect(JSON.parse(r.out).reminders.map((x: { postId: string }) => x.postId)).toEqual(["2026-10-25-a"]);
+  });
+
+  it("closes the issue of a Story that no longer exists", async () => {
+    const w = world([open()]);
+    const r = await run(["--remind", "--issue"], [], w.fetchFn);
+    expect(w.issues[0]!.state).toBe("closed");
+    expect(w.issues[0]!.comments[0]).toBe("The queued Story no longer exists.");
+    expect(r.out).toContain("closed #7");
+  });
+
+  it("puts the link in code so a mention or a reference in it does nothing", async () => {
+    const w = world();
+    await run(["--remind", "--issue"], [row({ link: "https://x.test/@user #123`\nhi" })], w.fetchFn);
+    expect(w.issues[0]!.body).toContain("`https://x.test/@user #123hi`");
+  });
+
+  it("refuses --issue outside the workflow, before touching anything", async () => {
+    const w = world();
+    for (const env of [{ GITHUB_REPOSITORY: "o/r", GITHUB_TOKEN: GH } as Record<string, string>, { GITHUB_REPOSITORY: "o/r", GITHUB_ACTIONS: "true" }]) {
+      const r = await run(["--remind", "--issue"], [row()], w.fetchFn, env);
+      expect(r.code).toBe(1);
+      expect(r.err).toContain("only in the weekpost-stories workflow");
+    }
+    expect(w.calls).toEqual([]);
   });
 
   it.each<[Status, string]>([["published", "Recorded as published."], ["canceled", "Recorded as canceled"]])("closes the issue when the row is %s", async (status, comment) => {
@@ -120,20 +158,17 @@ describe("weekpost stories --remind", () => {
     expect(w.calls.filter((c) => c.method !== "GET")).toEqual([]);
   });
 
-  it("leaves an issue alone when its row is gone or its title is not ours", async () => {
-    const w = world([open(), open({ number: 8, title: "something else" })]);
+  it("leaves an issue alone when its title is not ours", async () => {
+    const w = world([open({ number: 8, title: "something else" })]);
     await run(["--remind", "--issue"], [], w.fetchFn);
-    expect(w.issues.map((i) => i.state)).toEqual(["open", "open"]);
+    expect(w.issues.map((i) => i.state)).toEqual(["open"]);
   });
 
-  it("never prints the token, and says what is missing without it", async () => {
+  it("never prints the token, and sends it only as the Authorization header", async () => {
     const w = world();
     const r = await run(["--remind", "--issue", "--json"], [row()], w.fetchFn);
     expect(r.out + r.err).not.toContain(GH);
     expect(w.calls.every((c) => c.auth === `Bearer ${GH}`)).toBe(true);
-    const bad = await run(["--remind", "--issue"], [row()], w.fetchFn, { GITHUB_REPOSITORY: "o/r" });
-    expect(bad.code).toBe(1);
-    expect(bad.err).toContain("GITHUB_TOKEN is not set");
   });
 
   it("prints a GitHub error without the token", async () => {

@@ -54,6 +54,8 @@ export interface ReportInput {
   overdue: QueueRow[];
   /** Stories to post by hand this week. */
   manual: QueueRow[];
+  /** Manual Stories whose time passed and nobody resolved. */
+  manualOverdue: QueueRow[];
   tokens: Pick<Token, "account" | "expiresAt">[];
   graph: VersionStatus & { version: string };
   /** Rows from the `metrics.extra` hook; `null` when the hook is off. */
@@ -135,9 +137,12 @@ export function attentionLines(i: ReportInput): string[] {
   for (const s of i.stuck) {
     out.push(`- **In \`publishing\` for over ${STUCK_MINUTES} minutes:** \`${clean(s.postId)}/${clean(s.account)}\`. Check Instagram first, then \`npx weekpost resolve ${clean(s.postId)} --account=${clean(s.account)} --published=<link>\` or \`--not-published\`.`);
   }
-  if (i.overdue.length) {
-    const ids = i.overdue.slice(0, 5).map((r) => `\`${clean(r.postId)}/${clean(r.account)}\``).join(", ");
-    out.push(`- **The queue looks stopped:** ${i.overdue.length} scheduled post(s) are over ${OVERDUE_MINUTES} minutes late (${ids}). The Worker is not running them. Run \`npx weekpost doctor\`.`);
+  // A `scheduled` Story in manual mode is a Story waiting for a retry, not a stopped queue: it is listed with the Stories.
+  const lateStories = i.overdue.filter((r) => r.publishMode === "manual");
+  const lateScheduled = i.overdue.filter((r) => r.publishMode !== "manual");
+  if (lateScheduled.length) {
+    const ids = lateScheduled.slice(0, 5).map((r) => `\`${clean(r.postId)}/${clean(r.account)}\``).join(", ");
+    out.push(`- **The queue looks stopped:** ${lateScheduled.length} scheduled post(s) are over ${OVERDUE_MINUTES} minutes late (${ids}). The Worker is not running them. Run \`npx weekpost doctor\`.`);
   }
   for (const t of i.tokens) {
     if (t.expiresAt === null) continue;
@@ -156,9 +161,18 @@ export function attentionLines(i: ReportInput): string[] {
     out.push(`- **No token for \`${clean(m.account)}\`:** its posts have no metrics. Run \`npx weekpost token ${clean(m.account)}\`.`);
   }
   if (i.graph.level !== "ok") out.push(`- **Graph API version:** ${clean(i.graph.detail)}. Update weekpost, or set \`graphVersion\` in the run options, then run \`npx weekpost doctor\`.`);
-  if (i.manual.length) {
-    const ids = i.manual.map((r) => `\`${clean(r.postId)}/${clean(r.account)}\``).join(", ");
-    out.push(`- **${i.manual.length} Story(ies) to post by hand this week:** ${ids}. See \`npx weekpost status\`.`);
+  const unresolved = new Map<string, QueueRow>();
+  for (const r of [...i.manualOverdue, ...lateStories]) unresolved.set(`${r.postId}/${r.account}`, r);
+  // A Story already listed as overdue is not listed again as "this week".
+  const due = i.manual.filter((r) => !unresolved.has(`${r.postId}/${r.account}`));
+  if (due.length) {
+    const ids = due.map((r) => `\`${clean(r.postId)}/${clean(r.account)}\``).join(", ");
+    out.push(`- **${due.length} Story(ies) to post by hand this week:** ${ids}. Post them by hand with the files from \`npx weekpost package <week>\`, then \`npx weekpost resolve <post-id> --account=<a> --published\`.`);
+  }
+  for (const r of unresolved.values()) {
+    const id = clean(r.postId);
+    const a = clean(r.account);
+    out.push(`- **Story \`${id}/${a}\` was due ${clean(r.publishAt.slice(0, 16).replace("T", " "))} UTC and is not resolved.** Post it by hand (files: \`npx weekpost package <week>\`), then \`npx weekpost resolve ${id} --account=${a} --published\` (add \`=<link>\` if you have it); or \`npx weekpost resolve ${id} --account=${a} --not-published\` if it will not be posted.`);
   }
   for (const m of i.collected.issues.filter((x) => x.kind === "rate-limit")) {
     out.push(`- **Meta's rate limit (80002) hit ${where(m)}:** ${clean(m.detail)}. The numbers not read this run come back on the next one.`);

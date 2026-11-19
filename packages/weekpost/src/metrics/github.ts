@@ -77,6 +77,11 @@ export class GithubIssues {
     await this.call("PATCH", `/issues/${number}`, { state: "closed", state_reason: "completed" });
   }
 
+  async reopen(number: number, comment?: string): Promise<void> {
+    if (comment) await this.call("POST", `/issues/${number}/comments`, { body: comment });
+    await this.call("PATCH", `/issues/${number}`, { state: "open" });
+  }
+
   /** One issue per title, looked up among the issues that carry the label. */
   async upsert(title: string, body: string, label: string): Promise<{ action: "created" | "updated"; number: number; url: string }> {
     const found = (await this.list(label)).find((i) => i.title === title);

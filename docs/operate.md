@@ -14,6 +14,8 @@ Day-to-day use: the workflows, the queue commands, topic sources and the Worker 
 
 Set up before `weekpost-metrics` existed? Copy `.github/workflows/weekpost-metrics.yml` from the weekpost template (`node_modules/weekpost/template/.github/workflows/weekpost-metrics.yml`) into your repo, then run `gh label create metrics` (or `npx weekpost setup --apply --only=github.label`). `doctor` warns while the file is missing.
 
+Set up before `weekpost-stories` existed? Run `npx weekpost upgrade --apply` (it adds the workflow), then `npx weekpost setup --apply --only=github.label` for the `story` label.
+
 Several merges in a row all reach the queue: the enqueue runs once per merge and runs may overlap. Every queued row remembers the commit that wrote it (`--commit`, which the workflow sets to the merge commit), and a run only cancels or rewrites rows written by its own commit or an ancestor of it. So re-running an old merge, or two runs finishing out of order, never undoes what a newer merge queued: those rows are left alone and the comment lists them as skipped (`queued by a newer commit`). The workflow checks out the full history so git can answer that question.
 
 The preview is kept as an artifact for 30 days. Open it with `npx weekpost preview <pr-number>` (needs the [GitHub CLI](https://cli.github.com)). If you merge without a preview, or the artifact has expired, the enqueue writes nothing and comments what to do: re-apply the label, which generates new media and needs a new review. Pull requests from forks never run the preview. The workflows have no `pull_request_target`, minimal permissions, and every third-party action pinned to a commit SHA.
@@ -43,7 +45,7 @@ npx weekpost metrics                     # read Instagram Insights and print the
 `metrics` reads Instagram Insights and prints a weekly report:
 
 - **What it reads:** the posts of the last 14 days, and for each account the totals of the last 7 days plus the follower count.
-- **What it prints:** per account, the posts and some extra numbers, then an Attention list (failed or stuck posts, a stopped queue, tokens close to expiry, a token without the Insights permission, Stories to post by hand, missing data). Each line comes with the command that fixes it.
+- **What it prints:** per account, the posts and some extra numbers, then an Attention list (failed or stuck posts, a stopped queue, tokens close to expiry, a token without the Insights permission, Stories to post by hand this week, Stories past their time that nobody resolved, missing data). Each line comes with the command that fixes it; for a Story that is `npx weekpost resolve <post-id> --account=<a> --published` (link optional) once you posted it, or `--not-published` if it will not be posted.
 - `--json` prints the data instead of the text.
 - `--write` stores the numbers in `weekpost_metrics`.
 - `--issue` creates or rewrites one GitHub issue per week, titled `weekpost metrics: <YYYY-Www>` (label `metrics`). It needs the repository and a token that may write issues: from `GITHUB_REPOSITORY` and `GITHUB_TOKEN`, or `--repo=<owner/name>`. To run it yourself: `GITHUB_TOKEN=$(gh auth token) npx weekpost metrics --issue --repo=<owner/name>`.
