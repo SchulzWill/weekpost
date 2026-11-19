@@ -169,7 +169,7 @@ It is told not to add the preview label, merge or touch the queue, and four barr
 Not yet. Instagram only, through Meta's Instagram API (Unified login for new apps, Instagram login for older ones).
 
 **Does it publish Stories?**
-No. weekpost queues them as `manual`, and `package` gives you the files and caption to post by hand.
+No. weekpost queues them as `manual`, opens a GitHub issue (label `story`) about an hour before each one, and `package` gives you the files and caption to post by hand.
 
 **Does my data go to a weekpost server?**
 No. There is none. Your content lives in your repo, the queue in your Supabase project and the Worker in your Cloudflare account. Calls go only to the services you configure: OpenRouter, Supabase, Cloudflare, GitHub and Meta.

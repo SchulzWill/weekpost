@@ -2,6 +2,7 @@
 // Nothing here writes anything. A command line shown to the user never carries a secret value: secrets travel on stdin.
 import type { Fetch } from "../queue/types.ts";
 import { ISSUE_LABEL } from "../metrics/report.ts";
+import { STORY_LABEL } from "../metrics/github.ts";
 import type { Runner } from "./runner.ts";
 
 export type StepState = "ok" | "todo" | "needs-you" | "unknown";
@@ -77,8 +78,8 @@ export function stepsFor(ctx: Pick<SetupContext, "accounts" | "previewLabel" | "
     { id: "worker.secrets", title: "Worker secrets", commands: ["WEEKPOST_SUPABASE_URL", "WEEKPOST_SUPABASE_KEY"].map((n) => `${wranglerLine(`secret put ${n}`)}   (value on stdin)`) },
     {
       id: "github.label",
-      title: `GitHub labels "${ctx.previewLabel}" and "${ISSUE_LABEL}"`,
-      commands: [`gh label create ${JSON.stringify(ctx.previewLabel)}`, `gh label create ${JSON.stringify(ISSUE_LABEL)} --force   (the weekly metrics issue)`],
+      title: `GitHub labels "${ctx.previewLabel}", "${ISSUE_LABEL}" and "${STORY_LABEL}"`,
+      commands: [`gh label create ${JSON.stringify(ctx.previewLabel)}`, `gh label create ${JSON.stringify(ISSUE_LABEL)} --force   (the weekly metrics issue)`, `gh label create ${JSON.stringify(STORY_LABEL)} --force   (the Story reminder issues)`],
     },
     { id: "github.secrets", title: "GitHub Actions secret", commands: [`gh secret set ${ACTIONS_SECRET}   (value on stdin)`] },
     {

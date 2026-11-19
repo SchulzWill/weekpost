@@ -19,6 +19,7 @@ import { runFirstPost } from "./firstPost.ts";
 import { runSetup } from "./setup.ts";
 import { runDoctor } from "./doctor.ts";
 import { runMetrics } from "./metrics.ts";
+import { runStories } from "./stories.ts";
 import { runUpgrade } from "./upgrade.ts";
 import { readFileSync } from "node:fs";
 
@@ -50,6 +51,7 @@ commands:
   upgrade --plan|--apply  say what moving to the installed version would change (--plan, --json), or do it at a terminal (--apply; --print only prints the migration SQL)
   doctor                check, without writing anything, that the setup works and say what to run for each failure (--json)
   metrics               read Instagram Insights and print the weekly report (--write to store it, --issue to post it as an issue, --json)
+  stories --remind      list the manual Stories due in the next hour (--issue to open one GitHub issue per Story and close the settled ones, --json)
   first-post <account>  publish one public test post through your own Worker and wait for the permalink (--caption=<text>, --yes, --timeout=15 minutes)
   --version             print the installed version
   agent-env             exit 1 if this environment holds infrastructure secrets (names only are printed)
@@ -92,6 +94,8 @@ export async function main(argv: string[]): Promise<number> {
       return runSources(rest);
     case "metrics":
       return runMetrics(rest);
+    case "stories":
+      return runStories(rest);
     case "first-post":
       return runFirstPost(rest);
     case "setup":

@@ -37,6 +37,13 @@ describe("template .codex", () => {
     }
   });
 
+  it("forbids `stories --issue` and asks first for any other `stories` run, in every way of launching weekpost", () => {
+    for (const prefix of ["npx weekpost", "npx -y weekpost", "npx --yes weekpost", "weekpost", "./node_modules/.bin/weekpost", "node node_modules/weekpost/bin/weekpost.js"]) {
+      for (const c of ["stories --issue", "stories --remind --issue"]) expect(decide(`${prefix} ${c}`), `${prefix} ${c}`).toBe("forbidden");
+      expect(decide(`${prefix} stories --remind`), `${prefix} stories --remind`).toBe("prompt");
+    }
+  });
+
   it("forbids the gh and wrangler commands that give the human approval", () => {
     for (const c of ["gh pr merge 3 --squash", "gh pr ready 3", "gh secret set X", "gh api repos/o/r", "gh workflow run x.yml", "gh label create x", "wrangler deploy", "npx wrangler deploy", "script -q /dev/null ls"]) {
       expect(decide(c), c).toBe("forbidden");

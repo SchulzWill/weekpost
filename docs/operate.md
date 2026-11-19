@@ -10,8 +10,11 @@ Day-to-day use: the workflows, the queue commands, topic sources and the Worker 
 | `weekpost-preview` | label `media-ok` on a pull request from a branch of the same repository, and again on every push while the label stays | `OPENROUTER_API_KEY` |
 | `weekpost-enqueue` | push to `main` that touches a week folder, or manually with a pull request number (the job refuses any ref other than `main`) | `WEEKPOST_SUPABASE_URL`, `WEEKPOST_SUPABASE_KEY` (environment `weekpost`) |
 | `weekpost-metrics` | every Monday at 08:00 UTC, or manually (the job refuses any ref other than `main`) | `WEEKPOST_SUPABASE_URL`, `WEEKPOST_SUPABASE_KEY` (environment `weekpost`); optional `WEEKPOST_METRICS_EXTRA_ENV` for your own extra numbers. The token needs `instagram_manage_insights` (Unified login) or `instagram_business_manage_insights` (older apps); without it the issue says so instead of failing |
+| `weekpost-stories` | every hour, or manually (the job refuses any ref other than `main`) | the same two secrets as `weekpost-metrics`. Opens one issue (label `story`) per Story due in the next hour, and closes it once you record the Story as published or canceled with `weekpost resolve`. weekpost does not post the Story; the issue says when and how |
 
 Set up before `weekpost-metrics` existed? Copy `.github/workflows/weekpost-metrics.yml` from the weekpost template (`node_modules/weekpost/template/.github/workflows/weekpost-metrics.yml`) into your repo, then run `gh label create metrics` (or `npx weekpost setup --apply --only=github.label`). `doctor` warns while the file is missing.
+
+Set up before `weekpost-stories` existed? Run `npx weekpost upgrade --apply` (it adds the workflow), then `npx weekpost setup --apply --only=github.label` for the `story` label.
 
 Several merges in a row all reach the queue: the enqueue runs once per merge and runs may overlap. Every queued row remembers the commit that wrote it (`--commit`, which the workflow sets to the merge commit), and a run only cancels or rewrites rows written by its own commit or an ancestor of it. So re-running an old merge, or two runs finishing out of order, never undoes what a newer merge queued: those rows are left alone and the comment lists them as skipped (`queued by a newer commit`). The workflow checks out the full history so git can answer that question.
 

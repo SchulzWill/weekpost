@@ -3,7 +3,7 @@
 # These are prefix rules: they match the command words as written, so other ways to run the same program
 # (a script, `sh -c '...'`, a variable) can slip through. They reduce accidents; they are not a security boundary.
 # `weekpost setup --only=x --apply` is caught by the "prompt" rule for `setup`; `--yes` by the ones for cancel, restore,
-# reschedule and resolve. Every `weekpost metrics` asks first: prefix rules cannot tell `--write` or `--issue` from a read-only run.
+# reschedule and resolve. Every `weekpost metrics` and `weekpost stories` asks first: prefix rules cannot tell `--write` or `--issue` from a read-only run (`stories --issue` is forbidden outright when it follows the command directly or `--remind`).
 
 prefix_rule(
     pattern = ["npx", "weekpost", "setup", "--apply"],
@@ -333,6 +333,96 @@ prefix_rule(
     pattern = ["node", ["node_modules/weekpost/bin/weekpost.js", "./node_modules/.bin/weekpost"], "metrics"],
     decision = "prompt",
     justification = "weekpost metrics: with --write or --issue it writes the database or a GitHub issue, which is for CI (rules match only the prefix, so every metrics run asks); read the command and run it yourself",
+)
+
+prefix_rule(
+    pattern = ["npx", "weekpost", "stories", "--issue"],
+    decision = "forbidden",
+    justification = "weekpost stories --issue: writes GitHub issues, which is for CI (the hourly weekpost-stories workflow); run the read-only `weekpost stories --remind` instead",
+)
+
+prefix_rule(
+    pattern = ["npx", ["-y", "--yes"], "weekpost", "stories", "--issue"],
+    decision = "forbidden",
+    justification = "weekpost stories --issue: writes GitHub issues, which is for CI (the hourly weekpost-stories workflow); run the read-only `weekpost stories --remind` instead",
+)
+
+prefix_rule(
+    pattern = ["weekpost", "stories", "--issue"],
+    decision = "forbidden",
+    justification = "weekpost stories --issue: writes GitHub issues, which is for CI (the hourly weekpost-stories workflow); run the read-only `weekpost stories --remind` instead",
+)
+
+prefix_rule(
+    pattern = ["./node_modules/.bin/weekpost", "stories", "--issue"],
+    decision = "forbidden",
+    justification = "weekpost stories --issue: writes GitHub issues, which is for CI (the hourly weekpost-stories workflow); run the read-only `weekpost stories --remind` instead",
+)
+
+prefix_rule(
+    pattern = ["node", ["node_modules/weekpost/bin/weekpost.js", "./node_modules/.bin/weekpost"], "stories", "--issue"],
+    decision = "forbidden",
+    justification = "weekpost stories --issue: writes GitHub issues, which is for CI (the hourly weekpost-stories workflow); run the read-only `weekpost stories --remind` instead",
+)
+
+prefix_rule(
+    pattern = ["npx", "weekpost", "stories", "--remind", "--issue"],
+    decision = "forbidden",
+    justification = "weekpost stories --issue: writes GitHub issues, which is for CI (the hourly weekpost-stories workflow); run the read-only `weekpost stories --remind` instead",
+)
+
+prefix_rule(
+    pattern = ["npx", ["-y", "--yes"], "weekpost", "stories", "--remind", "--issue"],
+    decision = "forbidden",
+    justification = "weekpost stories --issue: writes GitHub issues, which is for CI (the hourly weekpost-stories workflow); run the read-only `weekpost stories --remind` instead",
+)
+
+prefix_rule(
+    pattern = ["weekpost", "stories", "--remind", "--issue"],
+    decision = "forbidden",
+    justification = "weekpost stories --issue: writes GitHub issues, which is for CI (the hourly weekpost-stories workflow); run the read-only `weekpost stories --remind` instead",
+)
+
+prefix_rule(
+    pattern = ["./node_modules/.bin/weekpost", "stories", "--remind", "--issue"],
+    decision = "forbidden",
+    justification = "weekpost stories --issue: writes GitHub issues, which is for CI (the hourly weekpost-stories workflow); run the read-only `weekpost stories --remind` instead",
+)
+
+prefix_rule(
+    pattern = ["node", ["node_modules/weekpost/bin/weekpost.js", "./node_modules/.bin/weekpost"], "stories", "--remind", "--issue"],
+    decision = "forbidden",
+    justification = "weekpost stories --issue: writes GitHub issues, which is for CI (the hourly weekpost-stories workflow); run the read-only `weekpost stories --remind` instead",
+)
+
+prefix_rule(
+    pattern = ["npx", "weekpost", "stories"],
+    decision = "prompt",
+    justification = "weekpost stories: with --issue it writes GitHub issues, which is for CI (rules match only the prefix, so every stories run asks); read the command and run it yourself",
+)
+
+prefix_rule(
+    pattern = ["npx", ["-y", "--yes"], "weekpost", "stories"],
+    decision = "prompt",
+    justification = "weekpost stories: with --issue it writes GitHub issues, which is for CI (rules match only the prefix, so every stories run asks); read the command and run it yourself",
+)
+
+prefix_rule(
+    pattern = ["weekpost", "stories"],
+    decision = "prompt",
+    justification = "weekpost stories: with --issue it writes GitHub issues, which is for CI (rules match only the prefix, so every stories run asks); read the command and run it yourself",
+)
+
+prefix_rule(
+    pattern = ["./node_modules/.bin/weekpost", "stories"],
+    decision = "prompt",
+    justification = "weekpost stories: with --issue it writes GitHub issues, which is for CI (rules match only the prefix, so every stories run asks); read the command and run it yourself",
+)
+
+prefix_rule(
+    pattern = ["node", ["node_modules/weekpost/bin/weekpost.js", "./node_modules/.bin/weekpost"], "stories"],
+    decision = "prompt",
+    justification = "weekpost stories: with --issue it writes GitHub issues, which is for CI (rules match only the prefix, so every stories run asks); read the command and run it yourself",
 )
 
 prefix_rule(
