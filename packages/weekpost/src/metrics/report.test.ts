@@ -12,7 +12,7 @@ const post = (over: Partial<QueueRow> = {}): QueueRow => ({
 const base = (over: Partial<ReportInput> = {}): ReportInput => ({
   now: NOW,
   collected: { rows: [], issues: [], accounts: ["en"], posts: [] },
-  failed: [], stuck: [], overdue: [], manual: [],
+  failed: [], stuck: [], overdue: [], manual: [], manualOverdue: [],
   tokens: [{ account: "en", expiresAt: "2027-01-01T00:00:00Z" }],
   graph: { version: "v26.0", level: "ok", detail: "v26.0 is the latest version" },
   extra: null,
@@ -121,6 +121,28 @@ describe("Attention, one item at a time", () => {
     const l = attention({ manual: [post({ postId: "2026-11-03-s", type: "story", status: "manual" })] })[0]!;
     expect(l).toContain("1 Story(ies) to post by hand");
     expect(l).toContain("`2026-11-03-s/en`");
+    expect(l).toContain("npx weekpost package <week>");
+    expect(l).toContain("npx weekpost resolve <post-id> --account=<a> --published");
+    expect(l).not.toContain("[=");
+  });
+  it("overdue manual Stories: one line each with the resolve commands, not repeated as this week's", () => {
+    const s = post({ postId: "2026-11-01-s", type: "story", status: "manual", publishAt: "2026-11-01T12:00:00Z", publishMode: "manual" });
+    expect(attention({ manual: [s], manualOverdue: [s] })).toMatchInlineSnapshot(`
+      [
+        "- **Story \`2026-11-01-s/en\` was due 2026-11-01 12:00 UTC and is not resolved.** Post it by hand (files: \`npx weekpost package <week>\`), then \`npx weekpost resolve 2026-11-01-s --account=en --published\` (add \`=<link>\` if you have it); or \`npx weekpost resolve 2026-11-01-s --account=en --not-published\` if it will not be posted.",
+      ]
+    `);
+  });
+  it("a scheduled manual Story that is late is listed as a Story, not as a stopped queue", () => {
+    const s = post({ postId: "2026-11-01-s", type: "story", status: "scheduled", publishAt: "2026-11-01T12:00:00Z", publishMode: "manual" });
+    expect(attention({ overdue: [s] })).toMatchInlineSnapshot(`
+      [
+        "- **Story \`2026-11-01-s/en\` was due 2026-11-01 12:00 UTC and is not resolved.** Post it by hand (files: \`npx weekpost package <week>\`), then \`npx weekpost resolve 2026-11-01-s --account=en --published\` (add \`=<link>\` if you have it); or \`npx weekpost resolve 2026-11-01-s --account=en --not-published\` if it will not be posted.",
+      ]
+    `);
+  });
+  it("no Story to resolve: the Attention list is as before", () => {
+    expect(buildReport(base())).not.toMatch(/Story/);
   });
   it("missing data: rate limit, no media id, empty, error", () => {
     const issues = [issue("rate-limit", { detail: "Instagram 80002: limit" }), issue("no-media-id", { postId: "2026-10-27-a" }), issue("empty", { postId: "2026-10-28-b" }), issue("error", { postId: "2026-10-29-c", detail: "boom" })];

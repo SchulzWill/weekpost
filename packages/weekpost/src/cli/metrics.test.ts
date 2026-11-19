@@ -160,6 +160,19 @@ describe("weekpost metrics", () => {
     expect(d.asked.manualDue).toEqual(["2026-11-02T00:00:00.000Z", "2026-11-09T00:00:00.000Z"]);
   });
 
+  it("lists overdue manual Stories from the queue, asking with the run's clock", async () => {
+    const story = { ...published(), postId: "2026-11-01-s", type: "story" as const, status: "manual" as const, publishMode: "manual" as const, publishAt: "2026-11-01T12:00:00Z" };
+    const asked: string[] = [];
+    const d = fakeDb({
+      manualOverdue: async (n) => { asked.push(`overdue ${n}`); return [story]; },
+    });
+    const r = await run([], { db: d.db, fetch: world().fetchFn });
+    expect(r.code).toBe(0);
+    expect(asked).toEqual(["overdue 2026-11-02T08:17:00.000Z"]);
+    expect(r.out).toContain("weekpost resolve 2026-11-01-s --account=en --published");
+    expect(r.out).toContain("then `npx weekpost resolve 2026-11-01-s --account=en --not-published`".replace("then ","or "));
+  });
+
   it("a failure of the run itself exits 1 without the token", async () => {
     const d = fakeDb({ failed: async () => { throw new Error(`boom ${TOKEN}`.replace(TOKEN, "x")); } });
     const r = await run([], { db: d.db, fetch: world().fetchFn });
