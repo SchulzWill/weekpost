@@ -239,10 +239,10 @@ describe("weekpost resolve", () => {
   it("rejects an empty --published= and two flags at once", async () => {
     const d = deps(fake([manual]).db);
     expect(await runResolve(["2026-10-14-tip", "--account=a", "--published=", "--yes"], cap().out, ".", d)).toBe(2);
-    expect(await runResolve(["2026-10-14-tip", "--account=a", "--published", "--fallback-now"], cap().out, ".", d)).toBe(2);
+    expect(await runResolve(["2026-10-14-tip", "--account=a", "--published", "--not-published"], cap().out, ".", d)).toBe(2);
   });
 
-  const manual = row({ type: "story", status: "manual", publishMode: "manual", fallbackAt: "2026-10-14T09:00:00Z" });
+  const manual = row({ type: "story", status: "manual", publishMode: "manual" });
   const retrying = row({ type: "story", status: "scheduled", publishMode: "manual", attempts: 1 });
   const key = "2026-10-14-tip/a";
   it.each([["manual", manual], ["retrying fallback", retrying]])("%s: --published records a Story posted by hand, with or without a link", async (_n, r) => {
@@ -260,21 +260,20 @@ describe("weekpost resolve", () => {
     expect(a.calls).toEqual([`manual ${key} {"published":false}`]);
     expect(lines.join("\n")).toContain("canceled: it will not be posted");
   });
-  it("manual: --fallback-now sends it out without the link sticker at the next publisher run", async () => {
-    const a = fake([row({ ...manual, fallbackAt: null })]);
+  it("refuses a manual resolve on a database without migration 0007", async () => {
+    const a = fake([row({ type: "story", status: "manual" })]);
     const { lines, out } = cap();
-    expect(await runResolve(["2026-10-14-tip", "--account=a", "--fallback-now", "--yes"], out, ".", deps(a.db))).toBe(0);
-    expect(a.calls).toEqual([`fallback-now ${key}`]);
-    expect(lines.join("\n")).toContain("goes out without the link sticker at the next publisher run");
+    expect(await runResolve(["2026-10-14-tip", "--account=a", "--published", "--yes"], out, ".", deps(a.db))).toBe(1);
+    expect(lines.join("\n")).toContain("0007_stories.sql");
+    expect(a.calls).toEqual([]);
   });
-  it("--fallback-now is refused when the fallback is already retrying, and on any other row", async () => {
-    for (const [r, why] of [[retrying, "already retrying"], [row({ publishMode: "auto" }), "not a manual Story"], [row({ status: "published" }), "not a manual Story"], [row({ status: "publishing", claimedAt: "2026-10-12T09:00:00Z" }), "not a manual Story"]] as const) {
-      const a = fake([r]);
-      const { lines, out } = cap();
-      expect(await runResolve(["2026-10-14-tip", "--account=a", "--fallback-now", "--yes"], out, ".", deps(a.db))).toBe(1);
-      expect(lines.join("\n")).toContain(why);
-      expect(a.calls).toEqual([]);
-    }
+  it("refuses a link that is not https on a manual Story", async () => {
+    const a = fake([manual]);
+    expect(await runResolve(["2026-10-14-tip", "--account=a", "--published=not a link", "--yes"], cap().out, ".", deps(a.db))).toBe(1);
+    expect(a.calls).toEqual([]);
+  });
+  it("--published=<link> with --not-published is a usage error", async () => {
+    expect(await runResolve(["2026-10-14-tip", "--account=a", "--published=https://x/y", "--not-published"], cap().out, ".", deps(fake([manual]).db))).toBe(2);
   });
   it("a scheduled auto row cannot be resolved", async () => {
     const a = fake([row({ publishMode: "auto" })]);
@@ -295,26 +294,25 @@ describe("weekpost resolve", () => {
 describe("planResolve for every status and flag", () => {
   const old = "2026-10-12T09:00:00Z";
   const link = "https://www.instagram.com/p/abc/";
-  const actions: [string, Parameters<typeof planResolve>[1]][] = [["--published", { published: true }], ["--published=link", { published: true, permalink: link }], ["--not-published", { published: false }], ["--fallback-now", { fallbackNow: true }]];
+  const actions: [string, Parameters<typeof planResolve>[1]][] = [["--published", { published: true }], ["--published=link", { published: true, permalink: link }], ["--not-published", { published: false }]];
   const cases: [string, QueueRow, boolean[]][] = [
-    // order: --published, --published=link, --not-published, --fallback-now
-    ["publishing", row({ status: "publishing", claimedAt: old }), [false, true, true, false]],
-    ["scheduled auto", row({ publishMode: "auto" }), [false, false, false, false]],
-    ["scheduled manual (fallback retrying)", row({ type: "story", publishMode: "manual" }), [true, true, true, false]],
-    ["manual", row({ type: "story", status: "manual", publishMode: "manual" }), [true, true, true, true]],
-    ["failed", row({ status: "failed" }), [false, false, false, false]],
-    ["published", row({ status: "published" }), [false, false, false, false]],
-    ["canceled", row({ status: "canceled" }), [false, false, false, false]],
+    // order: --published, --published=link, --not-published
+    ["publishing", row({ status: "publishing", claimedAt: old }), [false, true, true]],
+    ["scheduled auto", row({ publishMode: "auto" }), [false, false, false]],
+    ["scheduled manual (fallback retrying)", row({ type: "story", publishMode: "manual" }), [true, true, true]],
+    ["manual", row({ type: "story", status: "manual", publishMode: "manual" }), [true, true, true]],
+    ["failed", row({ status: "failed" }), [false, false, false]],
+    ["published", row({ status: "published" }), [false, false, false]],
+    ["canceled", row({ status: "canceled" }), [false, false, false]],
   ];
   for (const [name, r, expected] of cases) {
     it.each(actions.map((a, i) => [a[0], a[1], expected[i]] as const))(`${name} + $0 ok=$2`, (_f, action, ok) => {
       expect(planResolve(r, action, NOW).ok).toBe(ok);
     });
   }
-  it("status line shows a Story's mode and fallback time", () => {
-    const line = statusLine(row({ type: "story", status: "manual", publishMode: "manual", fallbackAt: "2026-10-14T09:00:00Z" }), zones);
-    expect(line).toContain("mode manual");
-    expect(line).toContain("fallback 2026-10-14 10:00 Europe/Lisbon");
+  it("status line shows the mode only when it differs from the status", () => {
+    expect(statusLine(row({ type: "story", status: "manual", publishMode: "manual" }), zones)).not.toContain("mode");
+    expect(statusLine(row({ type: "story", status: "scheduled", publishMode: "manual" }), zones)).toContain("mode manual");
     expect(statusLine(row({ type: "story", status: "scheduled", publishMode: "auto" }), zones)).toContain("mode auto");
     expect(statusLine(row(), zones)).not.toContain("mode");
   });
