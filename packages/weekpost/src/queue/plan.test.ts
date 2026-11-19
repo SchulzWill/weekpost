@@ -8,7 +8,7 @@ import { validateWeek } from "../content/week.ts";
 import { captionFor } from "../lint/caption.ts";
 import type { Manifest } from "../render/manifest.ts";
 import { testConfig } from "../../test/fixtures/brand.ts";
-import { localToUtc, planUpserts, planWeek, uploadsFor } from "./plan.ts";
+import { AUTO_STORY_WARNING, localToUtc, planUpserts, planWeek, uploadsFor } from "./plan.ts";
 import type { QueueRow } from "./types.ts";
 
 const { config } = parseConfig(testConfig());
@@ -324,11 +324,12 @@ describe("planUpserts", () => {
 // Story publish modes: `auto` is queued as scheduled, `manual` as manual with a fallback deadline.
 const modeConfig = (publish: "auto" | "manual", fallbackAfterMinutes: number | null = null) =>
   parseConfig({ ...testConfig(), stories: { publish, fallbackAfterMinutes } }).config;
-const modePlan = (publish: "auto" | "manual", fallbackAfterMinutes: number | null = null) => {
+// `autoPublished` true: the publisher posts auto Stories (the path that is off until it does).
+const modePlan = (publish: "auto" | "manual", fallbackAfterMinutes: number | null = null, autoPublished = true) => {
   const cfg = modeConfig(publish, fallbackAfterMinutes);
   const posts = load(cfg);
   const { manifest, hashes } = manifestFor(posts, cfg);
-  return planWeek({ week: "2026-W42", posts, manifest, fileHashes: hashes, config: cfg });
+  return planWeek({ week: "2026-W42", posts, manifest, fileHashes: hashes, config: cfg }, () => autoPublished);
 };
 const STORY = "2026-10-13-story-a";
 const storyRow = (publish: "auto" | "manual", fb: number | null = 120) => modePlan(publish, fb).rows.find((r) => r.postId === STORY)!;
@@ -345,6 +346,28 @@ describe("planWeek: Story publish mode", () => {
   it("queues a manual Story as manual with the fallback deadline after the publish time, or none", () => {
     expect(storyRow("manual", 120)).toMatchObject({ status: "manual", publishMode: "manual", publishAt: "2026-10-13T07:00:00.000Z", fallbackAt: "2026-10-13T09:00:00.000Z" });
     expect(storyRow("manual", null).fallbackAt).toBeNull();
+  });
+  it("queues an auto Story as manual with no deadline, and warns once, while the publisher cannot post Stories", () => {
+    const { rows, warnings } = modePlan("auto", 120, false);
+    expect(rows.find((r) => r.postId === STORY)).toMatchObject({ status: "manual", publishMode: "manual", fallbackAt: null });
+    expect(warnings).toEqual([AUTO_STORY_WARNING]);
+    expect(modePlan("manual", 120, false).warnings).toEqual([]);
+    expect(modePlan("auto", 120, true).warnings).toEqual([]);
+  });
+  it("uses the real auto mode in the manifest check even when it queues as manual", () => {
+    const cfg = modeConfig("auto");
+    const posts = load(cfg);
+    const { manifest, hashes } = manifestFor(posts, modeConfig("manual", 60));
+    expect(() => planWeek({ week: "2026-W42", posts, manifest, fileHashes: hashes, config: cfg }, () => false)).toThrow(/Story mode changed/);
+  });
+  it("treats a manifest without storyMode (0.1.1 and earlier) as manual", () => {
+    const cfg = modeConfig("manual", 60);
+    const posts = load(cfg);
+    const { manifest, hashes } = manifestFor(posts, cfg);
+    for (const p of manifest.posts) { delete p.storyMode; delete p.fallbackAfterMinutes; }
+    expect(planWeek({ week: "2026-W42", posts, manifest, fileHashes: hashes, config: cfg }).rows.find((r) => r.postId === STORY)).toMatchObject({ status: "manual" });
+    const auto = modeConfig("auto");
+    expect(() => planWeek({ week: "2026-W42", posts: load(auto), manifest, fileHashes: hashes, config: auto })).toThrow(/Story mode changed/);
   });
   it("refuses a manifest made with another Story mode", () => {
     const cfg = modeConfig("manual", 60);
@@ -391,10 +414,23 @@ describe("planUpserts: Story publish mode", () => {
   it("does not switch a failed row but still edits its content, with no status or mode", () => {
     const found = queued(storyRow("manual"), { status: "failed", publishMode: "manual", contentHash: sha("1") });
     const r = planUpserts(only("auto"), [found]);
-    expect(r.skipped[0].reason).toBe("status is failed");
+    expect(r.skipped).toEqual([]); // reported once, as the update
     expect(r.update).toHaveLength(1);
+    expect(r.update[0].note).toContain("switch was skipped");
     expect(r.update[0].mode).toBeUndefined();
     expect(r.update[0].status).toBeUndefined();
+  });
+  it("reports a failed row whose mode differs and whose content is unchanged once, as skipped", () => {
+    const found = queued(storyRow("manual"), { status: "failed", publishMode: "manual" });
+    const r = planUpserts(only("auto"), [found]);
+    expect(r.update).toEqual([]);
+    expect(r.skipped.map((x) => x.reason)).toEqual(["status is failed"]);
+  });
+  it("revives a canceled Story with the mode and deadline of the planned row", () => {
+    const manual = planUpserts(only("manual"), [queued(storyRow("auto"), { status: "canceled", canceledBy: "enqueue", publishMode: "auto" })]);
+    expect(manual.update[0]).toMatchObject({ revive: true, status: "manual", publishMode: "manual", fallbackAt: "2026-10-13T09:00:00.000Z" });
+    const auto = planUpserts(only("auto"), [queued(storyRow("manual"), { status: "canceled", canceledBy: "enqueue", publishMode: "manual" })]);
+    expect(auto.update[0]).toMatchObject({ revive: true, status: "scheduled", publishMode: "auto", fallbackAt: null });
   });
   it("applies the past-time rules to a switch", () => {
     const found = queued(storyRow("manual"), { status: "manual", publishMode: "manual" });

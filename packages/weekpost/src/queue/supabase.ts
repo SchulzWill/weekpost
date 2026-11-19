@@ -258,7 +258,7 @@ export function supabaseDb(url: string, key: string, fetchFn: Fetch = fetch): Db
     async updateContent(k, c, opts) {
       if (opts?.revive) {
         // Only a row the enqueue itself canceled; the SQL trigger refuses the operator's cancels as well.
-        const set = { ...contentColumns(c), status: c.status ?? "scheduled", attempts: 0, next_attempt_at: null, last_error: null, container_id: null };
+        const set = { ...contentColumns(c), status: c.status ?? "scheduled", ...(c.publishMode !== undefined ? { publish_mode: c.publishMode, fallback_at: c.fallbackAt ?? null } : {}), attempts: 0, next_attempt_at: null, last_error: null, container_id: null };
         const back = await patch(`${keyQuery(k)}&status=eq.canceled&canceled_by=eq.enqueue`, set);
         if (!back.length) throw new Error(`cannot bring back ${label(k)}: it is no longer canceled by the enqueue`);
         return;

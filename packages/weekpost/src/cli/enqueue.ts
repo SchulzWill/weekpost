@@ -159,7 +159,7 @@ export async function runEnqueue(args: string[], out: Out = console, cwd = proce
   }
 
   // 1. Plan every week before writing anything.
-  const plans: { week: string; rows: PlannedRow[]; uploads: Upload[]; skippedAccounts: string[]; weekDir: string; hashes: Record<string, string>; ctx: PlanContext }[] = [];
+  const plans: { week: string; rows: PlannedRow[]; uploads: Upload[]; skippedAccounts: string[]; warnings: string[]; weekDir: string; hashes: Record<string, string>; ctx: PlanContext }[] = [];
   for (const week of weeks) {
     const { weeks: loaded, issues } = checkContent(contentRoot, config, week);
     const errors = issues.filter((i) => i.level === "error");
@@ -173,6 +173,7 @@ export async function runEnqueue(args: string[], out: Out = console, cwd = proce
       const manifest = loadManifest(weekDir, week);
       const hashes = hashFiles(weekDir, manifest);
       const planned = planWeek({ week, posts: loaded[0].posts, manifest, fileHashes: hashes, config, enqueueAccounts: loaded[0].enqueueAccounts });
+      for (const w of planned.warnings) out.log(`warning ${week}: ${w}`);
       if (loaded[0].enqueueAccounts) out.log(`${week}: enqueue_accounts = ${loaded[0].enqueueAccounts.join(", ")}`);
       const ctx: PlanContext = { postAccounts: Object.fromEntries(loaded[0].posts.map((p) => [p.id, p.accounts])), skippedAccounts: planned.skippedAccounts };
       plans.push({ week, ...planned, weekDir, hashes, ctx });
@@ -254,6 +255,7 @@ export async function runEnqueue(args: string[], out: Out = console, cwd = proce
       out.log(`${p.week}: ${decision.insert.length} new, ${decision.update.length} updated, ${decision.skipped.length} skipped, ${decision.cancel.length} canceled`);
       for (const c of decision.cancel) out.log(`  cancel ${c.key} (${c.reason})`);
       for (const r of decision.update.filter((u) => u.revive)) out.log(`  restore ${r.postId}/${r.account} (canceled earlier when it left the YAML, and it is in it again)`);
+      for (const u of decision.update.filter((x) => x.note)) out.log(`  update ${u.postId}/${u.account} (${u.note})`);
       for (const s of decision.skipped) out.log(`  skip ${s.key} (${s.reason})`);
     }
   } catch (e) {
