@@ -14,6 +14,7 @@ const MIGRATION_3 = readFileSync(new URL("../../migrations/0003_stale_runs.sql",
 const MIGRATION_4 = readFileSync(new URL("../../migrations/0004_operator_functions.sql", import.meta.url), "utf8");
 const MIGRATION_5 = readFileSync(new URL("../../migrations/0005_metrics.sql", import.meta.url), "utf8");
 const MIGRATION_6 = readFileSync(new URL("../../migrations/0006_token_login.sql", import.meta.url), "utf8");
+const MIGRATION_7 = readFileSync(new URL("../../migrations/0007_stories.sql", import.meta.url), "utf8");
 const ROLES = ["service_role", "anon", "authenticated"];
 const PREFIX = "wp_test_";
 
@@ -46,7 +47,7 @@ async function connect(db: string): Promise<Client> {
 }
 
 /** Creates a fresh database and applies the migrations (only the first when `upTo` is 1, the first two when 2). */
-async function freshDb(upTo = 6): Promise<Client> {
+async function freshDb(upTo = 7): Promise<Client> {
   const name = `${PREFIX}${process.pid}_${counter++}`;
   await admin.query(`create database ${name}`);
   const c = await connect(name);
@@ -56,6 +57,7 @@ async function freshDb(upTo = 6): Promise<Client> {
   if (upTo >= 4) await c.query(MIGRATION_4);
   if (upTo >= 5) await c.query(MIGRATION_5);
   if (upTo >= 6) await c.query(MIGRATION_6);
+  if (upTo >= 7) await c.query(MIGRATION_7);
   return c;
 }
 
@@ -102,7 +104,7 @@ describe("0001_queue.sql: apply", () => {
   it("applies on a clean Postgres without the Supabase roles", async () => {
     const c = await freshDb();
     const { rows } = await c.query("select version from public.weekpost_schema");
-    expect(rows).toEqual([{ version: 6 }]);
+    expect(rows).toEqual([{ version: 7 }]);
     const roles = await admin.query("select rolname from pg_roles where rolname = any($1)", [ROLES]);
     expect(roles.rows).toEqual([]);
   });
@@ -285,7 +287,7 @@ describe("0003_stale_runs.sql: status transitions", () => {
     const c = await freshDb();
     await insertPost(c, POST);
     for (const to of ["failed", "scheduled", "manual", "scheduled", "canceled"]) {
-      await c.query("update public.weekpost_posts set status = $1", [to]);
+      await c.query("update public.weekpost_posts set status = $1::text, publish_mode = case when $1::text = 'manual' then 'manual' else 'auto' end", [to]);
       expect((await status(c)).status).toBe(to);
     }
   });
@@ -455,7 +457,7 @@ describe("0004_operator_functions.sql", () => {
     await c.query("update public.weekpost_posts set status = 'failed', media_id = 'm1'");
     await expect(c.query("select public.weekpost_reschedule($1,'en','2026-10-27T12:00:00Z',true)", [POST])).rejects.toThrow(/media id/);
     for (const st of ["manual", "canceled"]) {
-      await c.query("update public.weekpost_posts set status = $1, media_id = null", [st]);
+      await c.query("update public.weekpost_posts set status = $1::text, publish_mode = case when $1::text = 'manual' then 'manual' else 'auto' end, media_id = null", [st]);
       await expect(c.query("select public.weekpost_reschedule($1,'en','2026-10-27T12:00:00Z',true)", [POST])).rejects.toThrow(new RegExp(`status is ${st}`));
     }
     await c.query("select public.weekpost_restore($1,'en')", [POST]);
@@ -720,5 +722,163 @@ describe("0006_token_login.sql", () => {
     await insertToken(c, "en", "2026-12-28T12:00:00Z", "unified");
     await c.query("update public.weekpost_tokens set access_token = $1, expires_at = now() + interval '60 days' where account = 'en'", ["y".repeat(30)]);
     expect((await c.query("select login from public.weekpost_tokens")).rows).toEqual([{ login: "unified" }]);
+  });
+});
+
+describe("0007_stories.sql", () => {
+  const STORY = "2026-10-27-story";
+  const mode = async (c: Client, id: string) =>
+    (await c.query("select status, publish_mode, fallback_at, attempts, canceled_by, media_id, permalink, next_attempt_at from public.weekpost_posts where post_id=$1", [id])).rows[0];
+  /** A manual Story in `publishing` (as the fallback will leave it), with a fallback instant. */
+  const publishingManual = async (c: Client) => {
+    await insertPost(c, STORY, { type: "story", media: JSON.stringify(["s.jpg"]) });
+    await c.query("update public.weekpost_posts set status = 'scheduled', fallback_at = '2020-01-01T00:30:00Z' where post_id = $1", [STORY]);
+    await c.query("select * from public.weekpost_claim(1)");
+    expect((await mode(c, STORY)).status).toBe("publishing");
+  };
+
+  it("upgrades a 0006 database: Stories become manual, everything else auto, and the schema is 7", async () => {
+    const c = await freshDb(6);
+    await insertPost(c, "2026-10-26-tip-a");
+    await insertPost(c, "2026-10-26-reel", { type: "reel", media: JSON.stringify(["r.mp4"]) });
+    await insertPost(c, STORY, { type: "story", media: JSON.stringify(["s.jpg"]) });
+    await c.query("update public.weekpost_posts set status = 'manual' where post_id = $1", [STORY]);
+    await insertPost(c, "2026-10-27-story-canceled", { type: "story", media: JSON.stringify(["s.jpg"]) });
+    await c.query("update public.weekpost_posts set status = 'canceled' where post_id = '2026-10-27-story-canceled'");
+    await c.query(MIGRATION_7);
+    expect((await c.query("select version from public.weekpost_schema")).rows).toEqual([{ version: 7 }]);
+    const { rows } = await c.query("select post_id, status, publish_mode, fallback_at from public.weekpost_posts order by post_id");
+    expect(rows).toEqual([
+      { post_id: "2026-10-26-reel", status: "scheduled", publish_mode: "auto", fallback_at: null },
+      { post_id: "2026-10-26-tip-a", status: "scheduled", publish_mode: "auto", fallback_at: null },
+      { post_id: STORY, status: "manual", publish_mode: "manual", fallback_at: null },
+      { post_id: "2026-10-27-story-canceled", status: "canceled", publish_mode: "manual", fallback_at: null },
+    ]);
+  });
+
+  it("an insert without publish_mode (an older CLI) becomes manual for a Story and auto for the rest", async () => {
+    const c = await freshDb();
+    await insertPost(c, STORY, { type: "story", media: JSON.stringify(["s.jpg"]) });
+    await insertPost(c, "2026-10-26-tip-a");
+    expect((await mode(c, STORY)).publish_mode).toBe("manual");
+    expect((await mode(c, "2026-10-26-tip-a")).publish_mode).toBe("auto");
+    await expect(c.query("update public.weekpost_posts set publish_mode = null")).rejects.toThrow(/null value|not-null/);
+    await expect(c.query("update public.weekpost_posts set publish_mode = 'both'")).rejects.toThrow(/check/);
+  });
+
+  it("an upsert that does not name publish_mode keeps the mode of an existing row", async () => {
+    const c = await freshDb();
+    await insertPost(c, STORY, { type: "story", media: JSON.stringify(["s.jpg"]) });
+    await c.query("update public.weekpost_posts set status = 'manual', publish_mode = 'manual'");
+    await c.query(
+      "insert into public.weekpost_posts (post_id, account, type, week, publish_at, caption, media) values ($1,'en','story','2026-W44','2020-01-01T00:00:00Z','edited',$2) on conflict (post_id, account) do update set caption = excluded.caption",
+      [STORY, JSON.stringify(["s.jpg"])],
+    );
+    expect(await mode(c, STORY)).toMatchObject({ status: "manual", publish_mode: "manual" });
+  });
+
+  it("fallback_at needs publish_mode manual, and status manual needs publish_mode manual", async () => {
+    const c = await freshDb();
+    await insertPost(c, "2026-10-26-tip-a");
+    await expect(c.query("update public.weekpost_posts set fallback_at = now()")).rejects.toThrow(/weekpost_posts_fallback_manual/);
+    await expect(c.query("update public.weekpost_posts set status = 'manual'")).rejects.toThrow(/weekpost_posts_manual_status/);
+    await c.query("update public.weekpost_posts set status = 'scheduled', publish_mode = 'manual', fallback_at = now()");
+    expect((await mode(c, "2026-10-26-tip-a")).publish_mode).toBe("manual");
+  });
+
+  it("the guard still freezes publishing and published, and now also publish_mode and fallback_at", async () => {
+    const c = await freshDb();
+    await publishingManual(c);
+    await expect(c.query("update public.weekpost_posts set caption = 'other'")).rejects.toThrow(/content cannot change/);
+    await expect(c.query("update public.weekpost_posts set publish_mode = 'auto', fallback_at = null")).rejects.toThrow(/content cannot change/);
+    await expect(c.query("update public.weekpost_posts set fallback_at = now()")).rejects.toThrow(/content cannot change/);
+    await c.query("update public.weekpost_posts set container_id = 'c1'");
+    await c.query("select public.weekpost_mark_published($1,'en','c1','m1','p')", [STORY]);
+    await expect(c.query("update public.weekpost_posts set fallback_at = null")).rejects.toThrow(/content cannot change/);
+    await expect(c.query("update public.weekpost_posts set publish_mode = 'auto', fallback_at = null")).rejects.toThrow(/content cannot change/);
+  });
+
+  it("weekpost_restore returns an auto post to scheduled and a manual one to manual", async () => {
+    const c = await freshDb();
+    await insertPost(c, "2026-10-26-tip-a");
+    await insertPost(c, STORY, { type: "story", media: JSON.stringify(["s.jpg"]) });
+    await insertPost(c, "2026-10-28-story-auto", { type: "story", media: JSON.stringify(["s.jpg"]) });
+    await c.query("update public.weekpost_posts set publish_mode = 'auto' where post_id = '2026-10-28-story-auto'");
+    await c.query("update public.weekpost_posts set status = 'canceled', canceled_by = 'operator'");
+    for (const id of ["2026-10-26-tip-a", STORY, "2026-10-28-story-auto"]) await c.query("select public.weekpost_restore($1,'en')", [id]);
+    expect((await mode(c, "2026-10-26-tip-a")).status).toBe("scheduled");
+    expect((await mode(c, STORY)).status).toBe("manual");
+    expect((await mode(c, "2026-10-28-story-auto")).status).toBe("scheduled");
+  });
+
+  it("weekpost_story_fallback_now sets fallback_at on a manual Story and refuses anything else", async () => {
+    const c = await freshDb();
+    await insertPost(c, "2026-10-26-tip-a");
+    await insertPost(c, STORY, { type: "story", media: JSON.stringify(["s.jpg"]) });
+    await c.query("update public.weekpost_posts set status = 'manual' where post_id = $1", [STORY]);
+    await expect(c.query("select public.weekpost_story_fallback_now($1,'en')", ["2026-10-26-tip-a"])).rejects.toThrow(/not manual/);
+    await expect(c.query("select public.weekpost_story_fallback_now('2026-10-26-nope','en')")).rejects.toThrow(/not manual/);
+    await c.query("select public.weekpost_story_fallback_now($1,'en')", [STORY]);
+    expect((await c.query("select fallback_at is not null and fallback_at <= now() as ok from public.weekpost_posts where post_id = $1", [STORY])).rows[0].ok).toBe(true);
+    await c.query("update public.weekpost_posts set status = 'scheduled' where post_id = $1", [STORY]);
+    await expect(c.query("select public.weekpost_story_fallback_now($1,'en')", [STORY])).rejects.toThrow(/not manual/);
+  });
+
+  it("a manual Story that went back to scheduled keeps its mode and fallback_at (mark_failed, release, resolve false)", async () => {
+    for (const back of [
+      (c: Client) => c.query("select public.weekpost_mark_failed($1,'en','boom','1 minute')", [STORY]),
+      (c: Client) => c.query("select public.weekpost_release($1,'en',null,'1 minute')", [STORY]),
+      (c: Client) => c.query("select public.weekpost_resolve($1,'en',false,null)", [STORY]),
+    ]) {
+      const c = await freshDb();
+      await publishingManual(c);
+      await back(c);
+      const row = await mode(c, STORY);
+      expect(row).toMatchObject({ status: "scheduled", publish_mode: "manual" });
+      expect(row.fallback_at).toEqual(new Date("2020-01-01T00:30:00Z"));
+    }
+  });
+
+  it("weekpost_resolve_manual accepts manual and scheduled+manual, and a scheduled+manual row is no longer claimed", async () => {
+    const c = await freshDb();
+    await insertPost(c, STORY, { type: "story", media: JSON.stringify(["s.jpg"]) });
+    await c.query("select public.weekpost_resolve_manual($1,'en',true,null)", [STORY]);
+    expect(await mode(c, STORY)).toMatchObject({ status: "published", media_id: null, permalink: null, next_attempt_at: null });
+    expect((await c.query("select published_at is not null as ok from public.weekpost_posts")).rows[0].ok).toBe(true);
+
+    for (const [published, expected] of [[true, "published"], [false, "canceled"]] as const) {
+      const d = await freshDb();
+      await insertPost(d, STORY, { type: "story", media: JSON.stringify(["s.jpg"]) });
+      await d.query("update public.weekpost_posts set status = 'scheduled', next_attempt_at = now()");
+      await d.query("select public.weekpost_resolve_manual($1,'en',$2,'https://example.test/s/1')", [STORY, published]);
+      expect(await mode(d, STORY)).toMatchObject({ status: expected, next_attempt_at: null });
+      if (!published) expect((await mode(d, STORY)).canceled_by).toBe("operator");
+      expect((await d.query("select * from public.weekpost_claim(5)")).rows).toEqual([]);
+    }
+  });
+
+  it("weekpost_resolve_manual refuses scheduled+auto, publishing and a missing post, with the errcode of weekpost_resolve", async () => {
+    const c = await freshDb();
+    await insertPost(c, "2026-10-26-tip-a");
+    const code = async (id: string) => c.query("select public.weekpost_resolve_manual($1,'en',true,null)", [id]).then(() => null, (e: { code: string; message: string }) => e);
+    const auto = await code("2026-10-26-tip-a");
+    expect(auto?.message).toMatch(/not manual/);
+    const stuck = await c.query("select public.weekpost_resolve($1,'en',false,null)", ["nope"]).then(() => null, (e: { code: string }) => e.code);
+    expect(auto?.code).toBe(stuck);
+    expect((await code("2026-10-26-missing"))?.code).toBe(stuck);
+    await c.query("select * from public.weekpost_claim(1)");
+    expect((await code("2026-10-26-tip-a"))?.message).toMatch(/not manual/);
+    expect((await mode(c, "2026-10-26-tip-a")).status).toBe("publishing");
+  });
+
+  it("the new functions are executable by service_role only", async () => {
+    for (const r of ROLES) await admin.query(`do $$ begin if not exists (select from pg_roles where rolname = '${r}') then create role ${r} nologin; end if; end $$`);
+    const c = await freshDb();
+    for (const fn of ["public.weekpost_resolve_manual(text,text,boolean,text)", "public.weekpost_story_fallback_now(text,text)"]) {
+      const can = async (role: string) => (await c.query("select has_function_privilege($1, $2, 'execute') as ok", [role, fn])).rows[0].ok;
+      expect(await can("service_role")).toBe(true);
+      expect(await can("anon")).toBe(false);
+      expect(await can("authenticated")).toBe(false);
+    }
   });
 });

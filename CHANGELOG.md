@@ -8,10 +8,11 @@ How a release is cut: see [Releasing](docs/releasing.md).
 
 ### You need to do
 
-(none yet)
+- Run migration `0007_stories.sql` (`npx weekpost setup --apply --only=db.migrate`). It only adds columns, triggers and functions (`publish_mode`, `fallback_at`), so the previous Worker and CLI keep running: a Story inserted without the new column is still stored as manual.
 
 ### Improvements
 
+- The queue stores how a post is published (`publish_mode`: `auto` or `manual`) and when a manual Story may fall back to automatic publishing (`fallback_at`), with new functions to resolve a manual Story and to ask for its fallback now. Nothing publishes differently yet.
 - New [Upgrading](docs/upgrading.md) guide and a README section: the order of the commands, what `upgrade --apply` does to the database, the files and the Worker, `--print`, and the pending-deploy notice.
 - `weekpost doctor` warns when the `gh` login has no `workflow` scope (needed to push `.github/workflows/`, which an upgrade does) and prints `gh auth refresh -s workflow`.
 - `weekpost upgrade --apply` carries out what `--plan` shows, at a terminal: it updates the database, then your files (asking before it replaces one you edited), then the lock, and offers to deploy the Worker. The template denies it to Claude Code and Codex, like `setup --apply`; `upgrade --apply` brings those rule files up to date itself (it asks first if you edited them).
